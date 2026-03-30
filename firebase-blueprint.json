@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "A member of the SAUDAS charity organization.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the member."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the member."
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the member."
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the member (e.g., Volunteer, Blood Donor)."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address of the member."
+        },
+        "bloodGroup": {
+          "type": "string",
+          "description": "Blood group of the member."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Approval status of the member."
+        },
+        "joinedAt": {
+          "type": "integer",
+          "description": "Timestamp when the member joined."
+        }
+      },
+      "required": ["name", "phone", "address", "role", "joinedAt", "status"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A service provided by the organization.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Lucide icon name"
+        }
+      },
+      "required": ["title", "description", "image"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the application, potentially an admin.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/members/{memberId}": {
+      "schema": "Member",
+      "description": "Collection of charity members."
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Collection of services."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of users and their roles."
+    }
+  }
+}

@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: members
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - phone: string (required)
+    //   - address: string (required)
+    //   - role: string (required)
+    //   - email: string (optional)
+    //   - joinedAt: timestamp (required)
+    //   - image: string (optional)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidMember(data) {
+      return data.keys().hasAll(['name', 'phone', 'address', 'role', 'joinedAt', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20 &&
+             data.address is string && data.address.size() > 0 && data.address.size() < 500 &&
+             data.role is string && data.role.size() > 0 && data.role.size() < 50 &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             (data.joinedAt is timestamp || data.joinedAt is int) &&
+             (!('email' in data) || (data.email is string && (data.email == "" || isValidEmail(data.email)))) &&
+             (!('bloodGroup' in data) || (data.bloodGroup is string && data.bloodGroup.size() < 10)) &&
+             (!('image' in data) || (data.image is string && (data.image.matches("^https://.*") || data.image.matches("^http://.*"))));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidService(data) {
+      return data.keys().hasAll(['title', 'description', 'image']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
+             data.image is string && (data.image.matches("^https://.*") || data.image.matches("^http://.*"));
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.uid == userId) && 
+                    (request.resource.data.role == 'user' || (request.auth.token.email == "md.munnahossain885@gmail.com" && request.resource.data.role == 'admin'));
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /members/{memberId} {
+      // Public can only see approved members. Admins can see all.
+      allow read: if (resource.data.status == 'approved') || isAdmin();
+      
+      // Anyone can submit a registration, but it must be 'pending' unless they are an admin.
+      allow create: if isValidMember(request.resource.data) && 
+                    (request.resource.data.status == 'pending' || isAdmin());
+      
+      // Only admins can update or delete members.
+      allow update, delete: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      // Public read, admin write
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidService(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /gallery/{photoId} {
+      // Public read, admin write
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.email == "md.munnahossain885@gmail.com" ||
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+  }
+}

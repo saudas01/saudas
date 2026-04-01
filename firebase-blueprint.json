@@ -53,15 +53,48 @@
         "description": {
           "type": "string"
         },
-        "image": {
-          "type": "string"
+        "images": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "icon": {
           "type": "string",
           "description": "Lucide icon name"
+        },
+        "color": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
         }
       },
-      "required": ["title", "description", "image"]
+      "required": ["title", "description", "images"]
+    },
+    "ActiveMember": {
+      "title": "ActiveMember",
+      "description": "A featured active member of the organization.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        }
+      },
+      "required": ["name", "role", "image", "order"]
     },
     "User": {
       "title": "User",
@@ -97,6 +130,10 @@
     "/services/{serviceId}": {
       "schema": "Service",
       "description": "Collection of services."
+    },
+    "/active_members/{memberId}": {
+      "schema": "ActiveMember",
+      "description": "Collection of featured active members."
     },
     "/users/{userId}": {
       "schema": "User",

@@ -35,7 +35,9 @@ import {
   LogIn,
   LogOut,
   User as UserIcon,
-  UserCircle
+  UserCircle,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -54,6 +56,7 @@ import {
   deleteDoc,
   getDocs,
   getDoc,
+  startAfter,
   Timestamp 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -114,6 +117,7 @@ import {
   onAuthStateChanged, 
   signOut,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   User 
 } from 'firebase/auth';
 
@@ -143,14 +147,12 @@ const AnimatedCounter = ({ target, duration = 2 }: { target: number; duration?: 
   return <>{toBengaliNumber(count)}</>;
 };
 
-// --- Constants ---
-
 const INITIAL_MEMBERS = [
   { id: 1, name: "মো: হুমায়ূন কবীর", designation: "সভাপতি", address: "রামপুর", mobile: "01724-120376" },
   { id: 2, name: "মো: সাইদুল ইসলাম", designation: "সহ-সভাপতি", address: "শাহপুর", mobile: "01767-627677" },
   { id: 3, name: "মো: মনিরুল ইসলাম", designation: "সহ-সভাপতি", address: "শাহপুর", mobile: "01314-506935" },
   { id: 4, name: "মো: রাজু আহমেদ", designation: "সহ-সভাপতি", address: "নোয়ালী", mobile: "01737-293846" },
-  { id: 5, name: "মো: হাসিবুর রহমান", designation: "সহ-সভাপতি", address: "খেদাপাড়া", mobile: "01774-002158" },
+  { id: 5, name: "মো: হাসিবুর রহমান", designation: "সহ-সভাপতি", address: "শাহপুর", mobile: "01717-842941" },
   { id: 6, name: "মো: জলি আহমেদ", designation: "সহ-সভাপতি", address: "মোবারকপুর", mobile: "01929-446455" },
   { id: 7, name: "মো: আল-আমিন", designation: "সহ-সভাপতি", address: "নোয়ালী", mobile: "01759-173958" },
   { id: 8, name: "মো: জি এম মহিউদ্দীন", designation: "সহ-সভাপতি", address: "শয়লা", mobile: "01743-430308" },
@@ -200,7 +202,97 @@ const INITIAL_MEMBERS = [
 
 // --- Components ---
 
-const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User | null }) => {
+const ConfirmModal = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  message, 
+  confirmText = "নিশ্চিত করুন", 
+  cancelText = "বাতিল",
+  type = 'danger'
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+  title: string; 
+  message: string; 
+  confirmText?: string; 
+  cancelText?: string;
+  type?: 'danger' | 'primary'
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative bg-emerald-900 border border-emerald-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl p-8 text-center"
+      >
+        <div className={cn(
+          "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg",
+          type === 'danger' ? "bg-red-600/20 text-red-500 shadow-red-600/10" : "bg-emerald-600/20 text-emerald-500 shadow-emerald-600/10"
+        )}>
+          {type === 'danger' ? <Trash2 size={32} /> : <Check size={32} />}
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+        <p className="text-emerald-100/60 text-sm mb-8">{message}</p>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => { onConfirm(); onClose(); }}
+            className={cn(
+              "flex-grow py-3 rounded-xl font-bold transition-all shadow-lg",
+              type === 'danger' ? "bg-red-600 text-white hover:bg-red-500 shadow-red-600/20" : "bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20"
+            )}
+          >
+            {confirmText}
+          </button>
+          <button 
+            onClick={onClose}
+            className="px-6 bg-emerald-800 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all"
+          >
+            {cancelText}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const Notification = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 50, x: '-50%' }}
+      animate={{ opacity: 1, y: 0, x: '-50%' }}
+      exit={{ opacity: 0, y: 50, x: '-50%' }}
+      className={cn(
+        "fixed bottom-8 left-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 min-w-[300px]",
+        type === 'success' ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+      )}
+    >
+      {type === 'success' ? <CheckCircle2 size={20} /> : <X size={20} />}
+      <span className="font-medium">{message}</span>
+      <button onClick={onClose} className="ml-auto p-1 hover:bg-white/20 rounded-lg transition-colors">
+        <X size={16} />
+      </button>
+    </motion.div>
+  );
+};
+
+const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, user: User | null, setView: (v: 'home' | 'admin') => void }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -227,13 +319,13 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
       isScrolled ? "bg-white/90 backdrop-blur-md shadow-sm" : "bg-transparent"
     )}>
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
           <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
             <Heart size={24} fill="currentColor" />
           </div>
           <span className={cn(
             "font-bold text-xl tracking-tight",
-            isScrolled ? "text-emerald-900" : "text-white"
+            isScrolled ? "text-emerald-950" : "text-white"
           )}>
             সাউদাস
           </span>
@@ -255,8 +347,8 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
           ))}
           <div className="flex items-center gap-4">
             {user ? (
-              <a
-                href="#admin"
+              <button
+                onClick={() => setView('admin')}
                 className={cn(
                   "p-2 rounded-full transition-all hover:bg-emerald-500/10",
                   isScrolled ? "text-emerald-900" : "text-white"
@@ -268,7 +360,7 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
                 ) : (
                   <LayoutDashboard size={20} />
                 )}
-              </a>
+              </button>
             ) : (
               <button
                 onClick={onLoginClick}
@@ -293,8 +385,8 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
         {/* Mobile Menu Toggle */}
         <div className="flex items-center gap-4 md:hidden">
           {user ? (
-            <a
-              href="#admin"
+            <button
+              onClick={() => setView('admin')}
               className={cn("p-2", isScrolled ? "text-emerald-900" : "text-white")}
             >
               {user.photoURL ? (
@@ -302,7 +394,7 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
               ) : (
                 <LayoutDashboard size={20} />
               )}
-            </a>
+            </button>
           ) : (
             <button
               onClick={onLoginClick}
@@ -355,8 +447,33 @@ const Navbar = ({ onLoginClick, user }: { onLoginClick: () => void, user: User |
     </nav>
   );
 };
-
 const Hero = () => {
+  const [activeMembers, setActiveMembers] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(50);
+
+  useEffect(() => {
+    if (!db) return;
+    
+    // Fetch active members for avatars
+    const qActive = query(collection(db, 'active_members'), orderBy('order', 'asc'), limit(5));
+    const unsubActive = onSnapshot(qActive, (snapshot) => {
+      setActiveMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'active_members');
+    });
+
+    // Fetch total member count
+    const qMembers = query(collection(db, 'members'), where('status', '==', 'approved'));
+    const unsubCount = onSnapshot(qMembers, (snapshot) => {
+      setTotalCount(Math.max(50, snapshot.size));
+    });
+
+    return () => {
+      unsubActive();
+      unsubCount();
+    };
+  }, []);
+
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
       {/* Background with Overlay */}
@@ -403,15 +520,29 @@ const Hero = () => {
 
           <div className="mt-12 flex items-center gap-6">
             <div className="flex -space-x-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-12 h-12 rounded-full border-2 border-emerald-900 overflow-hidden bg-emerald-800">
-                  <img src={`https://i.pravatar.cc/150?u=${i}`} alt="সদস্য" referrerPolicy="no-referrer" />
-                </div>
-              ))}
+              {activeMembers.length > 0 ? (
+                activeMembers.map((member) => (
+                  <div key={member.id} className="w-12 h-12 rounded-full border-2 border-emerald-900 overflow-hidden bg-emerald-800">
+                    {member.image ? (
+                      <img src={member.image} alt={member.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-emerald-400">
+                        <UserCircle size={24} />
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                [1, 2, 3, 4].map((i) => (
+                  <div key={i} className="w-12 h-12 rounded-full border-2 border-emerald-900 overflow-hidden bg-emerald-800">
+                    <img src={`https://i.pravatar.cc/150?u=${i}`} alt="সদস্য" referrerPolicy="no-referrer" />
+                  </div>
+                ))
+              )}
             </div>
             <div className="text-emerald-100/80 text-sm">
               <span className="text-white font-bold block text-lg">
-                <AnimatedCounter target={50} />+
+                <AnimatedCounter target={totalCount} />+
               </span>
               সক্রিয় সদস্য
             </div>
@@ -531,12 +662,18 @@ const About = () => {
                   "overflow-hidden rounded-2xl",
                   i === 0 ? "col-span-2 aspect-video" : "aspect-square"
                 )}>
-                  <img 
-                    src={photo.url} 
-                    alt="সাউদাস ফ্রি মেডিক্যাল ক্যাম্প" 
-                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                    referrerPolicy="no-referrer"
-                  />
+                  {photo.url ? (
+                    <img 
+                      src={photo.url} 
+                      alt="সাউদাস ফ্রি মেডিক্যাল ক্যাম্প" 
+                      className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-600">
+                      <ImageIcon size={32} />
+                    </div>
+                  )}
                 </div>
               )) : (
                 <div className="col-span-2">
@@ -563,6 +700,7 @@ const Services = () => {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [activeImageIndices, setActiveImageIndices] = useState<{[key: string]: number}>({});
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => setUser(u));
@@ -581,7 +719,7 @@ const Services = () => {
               title: "রক্তদান কর্মসূচি",
               description: "জীবন রক্ষাকারী রক্তদাতাদের সাথে সম্প্রদায়ের জরুরি প্রয়োজনে থাকা ব্যক্তিদের সংযুক্ত করা।",
               icon: "Droplets",
-              image: "https://storage.googleapis.com/static.antigravity.ai/projects/d1ac55c9-c597-4d96-a679-bc7e2363429a/attachments/40669f53-5353-487c-8608-89c565893043.png",
+              images: ["https://storage.googleapis.com/static.antigravity.ai/projects/d1ac55c9-c597-4d96-a679-bc7e2363429a/attachments/40669f53-5353-487c-8608-89c565893043.png"],
               color: "bg-red-50 text-red-600",
               accent: "border-red-100"
             },
@@ -589,7 +727,7 @@ const Services = () => {
               title: "ফ্রি মেডিক্যাল ক্যাম্প",
               description: "সুবিধাবঞ্চিত জনগোষ্ঠীর জন্য প্রয়োজনীয় স্বাস্থ্যসেবা এবং চেকআপ প্রদান করা।",
               icon: "Stethoscope",
-              image: "https://storage.googleapis.com/static.antigravity.ai/projects/d1ac55c9-c597-4d96-a679-bc7e2363429a/attachments/17596041-35b8-444c-9f69-79a66014603b.png",
+              images: ["https://storage.googleapis.com/static.antigravity.ai/projects/d1ac55c9-c597-4d96-a679-bc7e2363429a/attachments/17596041-35b8-444c-9f69-79a66014603b.png"],
               color: "bg-emerald-50 text-emerald-600",
               accent: "border-emerald-100"
             },
@@ -597,7 +735,7 @@ const Services = () => {
               title: "দরিদ্রদের সহায়তা",
               description: "টেকসই জীবিকা কর্মসূচি এবং সরাসরি সহায়তার মাধ্যমে পরিবারগুলোকে শক্তিশালী করা।",
               icon: "HandHelping",
-              image: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop",
+              images: ["https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop"],
               color: "bg-amber-50 text-amber-600",
               accent: "border-amber-100"
             },
@@ -605,7 +743,7 @@ const Services = () => {
               title: "অসুস্থ ব্যক্তিদের চিকিৎসা",
               description: "অসুস্থ ব্যক্তিদের জন্য জরুরি চিকিৎসা সহায়তা এবং ফান্ড সংগ্রহ করা।",
               icon: "Activity",
-              image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?q=80&w=800&auto=format&fit=crop",
+              images: ["https://images.unsplash.com/photo-1516549655169-df83a0774514?q=80&w=800&auto=format&fit=crop"],
               color: "bg-blue-50 text-blue-600",
               accent: "border-blue-100"
             }
@@ -620,7 +758,15 @@ const Services = () => {
           }
         }
       } else {
-        setServices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const fetchedServices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setServices(fetchedServices);
+        
+        // Initialize active image indices
+        const indices: {[key: string]: number} = {};
+        fetchedServices.forEach(s => {
+          indices[s.id] = 0;
+        });
+        setActiveImageIndices(indices);
       }
       setLoading(false);
     }, (error) => {
@@ -641,6 +787,20 @@ const Services = () => {
     }
   };
 
+  const nextImage = (serviceId: string, imagesCount: number) => {
+    setActiveImageIndices(prev => ({
+      ...prev,
+      [serviceId]: (prev[serviceId] + 1) % imagesCount
+    }));
+  };
+
+  const prevImage = (serviceId: string, imagesCount: number) => {
+    setActiveImageIndices(prev => ({
+      ...prev,
+      [serviceId]: (prev[serviceId] - 1 + imagesCount) % imagesCount
+    }));
+  };
+
   if (loading) return null;
 
   return (
@@ -655,41 +815,87 @@ const Services = () => {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {services.map((service, idx) => (
-            <motion.div
-              key={service.id || service.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: idx * 0.1 }}
-              className={cn(
-                "overflow-hidden rounded-3xl border transition-all hover:shadow-xl hover:-translate-y-1 group",
-                service.accent || "border-emerald-100"
-              )}
-            >
-              <div className="relative h-48 overflow-hidden">
-                <img 
-                  src={service.image} 
-                  alt={service.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </div>
-              <div className="p-8">
-                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110", service.color || "bg-emerald-50 text-emerald-600")}>
-                  {getIcon(service.icon)}
+          {services.map((service, idx) => {
+            const images = service.images || [];
+            const activeIdx = activeImageIndices[service.id] || 0;
+
+            return (
+              <motion.div
+                key={service.id || service.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                className={cn(
+                  "overflow-hidden rounded-3xl border transition-all hover:shadow-xl hover:-translate-y-1 group",
+                  service.accent || "border-emerald-100"
+                )}
+              >
+                <div className="relative h-48 overflow-hidden">
+                  <AnimatePresence mode="wait">
+                    {images.length > 0 ? (
+                      <motion.img 
+                        key={activeIdx}
+                        src={images[activeIdx]} 
+                        alt={service.title}
+                        initial={{ opacity: 0, scale: 1.1 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.5 }}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-emerald-50 flex items-center justify-center text-emerald-200">
+                        <ImageIcon size={48} />
+                      </div>
+                    )}
+                  </AnimatePresence>
+                  
+                  {images.length > 1 && (
+                    <>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-x-0 bottom-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        {images.map((_: any, i: number) => (
+                          <div 
+                            key={i} 
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full transition-all",
+                              i === activeIdx ? "bg-white w-4" : "bg-white/50"
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); prevImage(service.id, images.length); }}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/20 backdrop-blur-md text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); nextImage(service.id, images.length); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/20 backdrop-blur-md text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </>
+                  )}
                 </div>
-                <h4 className="text-xl font-bold text-emerald-950 mb-4">{service.title}</h4>
-                <p className="text-emerald-900/60 leading-relaxed mb-6">
-                  {service.description}
-                </p>
-                <button className="text-emerald-600 font-bold text-sm flex items-center gap-2 hover:gap-3 transition-all">
-                  আরও জানুন <ArrowRight size={16} />
-                </button>
-              </div>
-            </motion.div>
-          ))}
+                <div className="p-8">
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110", service.color || "bg-emerald-50 text-emerald-600")}>
+                    {getIcon(service.icon)}
+                  </div>
+                  <h4 className="text-xl font-bold text-emerald-950 mb-4">{service.title}</h4>
+                  <p className="text-emerald-900/60 leading-relaxed mb-6">
+                    {service.description}
+                  </p>
+                  <button className="text-emerald-600 font-bold text-sm flex items-center gap-2 hover:gap-3 transition-all">
+                    আরও জানুন <ArrowRight size={16} />
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -697,12 +903,29 @@ const Services = () => {
 };
 
 const ActiveMembers = () => {
-  const leadership = [
-    INITIAL_MEMBERS[0], // সভাপতি
-    INITIAL_MEMBERS[11], // সাধারণ সম্পাদক
-    INITIAL_MEMBERS[25], // কোষাধ্যক্ষ
-    INITIAL_MEMBERS[29], // দপ্তর সম্পাদক
-  ];
+  const [activeMembers, setActiveMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'active_members'), orderBy('order', 'asc')),
+      (snapshot) => {
+        setActiveMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'active_members');
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  if (loading || activeMembers.length === 0) return null;
+
+  // Duplicate members for seamless loop
+  const displayMembers = [...activeMembers, ...activeMembers];
 
   return (
     <section id="members" className="py-24 bg-white relative overflow-hidden">
@@ -745,34 +968,44 @@ const ActiveMembers = () => {
         <div className="relative mb-24 overflow-hidden">
           <motion.div 
             className="flex gap-8 w-max"
-            animate={{ x: [0, -1232] }} // (280px width + 32px gap) * 4 = 1248, but we need to loop. Let's use a duplicated list for seamless loop.
+            animate={{ x: [0, -(312 * activeMembers.length)] }} // 280px width + 32px gap = 312px
             transition={{ 
               repeat: Infinity, 
-              duration: 20, 
+              duration: activeMembers.length * 5, 
               ease: "linear" 
             }}
           >
-            {[...leadership, ...leadership].map((leader, idx) => (
+            {displayMembers.map((leader, idx) => (
               <div
                 key={`leader-${leader.id}-${idx}`}
                 className="w-[280px] bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-900/5 hover:shadow-emerald-900/10 transition-all group relative overflow-hidden flex-shrink-0"
               >
                 <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-[3rem] -mr-4 -mt-4 group-hover:bg-emerald-100 transition-colors" />
                 <div className="relative z-10">
-                  <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
-                    <ShieldCheck size={32} />
+                  <div className="w-20 h-20 bg-emerald-100 rounded-2xl overflow-hidden mb-6 shadow-lg group-hover:scale-110 transition-transform border-2 border-emerald-500/20">
+                    {leader.image ? (
+                      <img src={leader.image} alt={leader.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-emerald-500">
+                        <UserCircle size={40} />
+                      </div>
+                    )}
                   </div>
                   <h4 className="text-xl font-bold text-emerald-950 mb-1">{leader.name}</h4>
-                  <p className="text-emerald-600 font-bold text-sm uppercase tracking-wider mb-4">{leader.designation}</p>
+                  <p className="text-emerald-600 font-bold text-sm uppercase tracking-wider mb-4">{leader.role}</p>
                   <div className="space-y-2 pt-4 border-t border-emerald-50">
-                    <div className="flex items-center gap-3 text-emerald-900/60 text-sm">
-                      <MapPin size={14} />
-                      <span>{leader.address}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-emerald-900/60 text-sm">
-                      <Phone size={14} />
-                      <a href={`tel:${leader.mobile}`} className="hover:text-emerald-600 transition-colors">{leader.mobile}</a>
-                    </div>
+                    {leader.address && (
+                      <div className="flex items-center gap-3 text-emerald-900/60 text-sm">
+                        <MapPin size={14} />
+                        <span>{leader.address}</span>
+                      </div>
+                    )}
+                    {leader.phone && (
+                      <div className="flex items-center gap-3 text-emerald-900/60 text-sm">
+                        <Phone size={14} />
+                        <a href={`tel:${leader.phone}`} className="hover:text-emerald-600 transition-colors">{leader.phone}</a>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -789,29 +1022,51 @@ const MemberDirectory = () => {
   const [roleFilter, setRoleFilter] = useState("সব");
   const [dbMembers, setDbMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 20;
+
+  const fetchMembers = async (isNext = false) => {
+    if (!db) return;
+    setLoading(true);
+    try {
+      let q = query(
+        collection(db, 'members'), 
+        where('status', '==', 'approved'), 
+        orderBy('joinedAt', 'desc'),
+        limit(PAGE_SIZE)
+      );
+
+      if (isNext && lastDoc) {
+        q = query(
+          collection(db, 'members'), 
+          where('status', '==', 'approved'), 
+          orderBy('joinedAt', 'desc'),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+      const newMembers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      if (isNext) {
+        setDbMembers(prev => [...prev, ...newMembers]);
+      } else {
+        setDbMembers(newMembers);
+      }
+
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, 'members');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!db) return;
-
-    const q = query(
-      collection(db, 'members'), 
-      where('status', '==', 'approved'),
-      orderBy('joinedAt', 'desc'), 
-      limit(100)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const memberList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setDbMembers(memberList);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'members');
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    fetchMembers();
   }, []);
 
   // Combine hardcoded members with database members
@@ -960,12 +1215,23 @@ const MemberDirectory = () => {
             </table>
           </div>
         </div>
+
+        {hasMore && !loading && (
+          <div className="mt-12 text-center">
+            <button 
+              onClick={() => fetchMembers(true)}
+              className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20"
+            >
+              আরো সদস্য দেখুন
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
 };
 
-const RegistrationForm = () => {
+const RegistrationForm = ({ showNotification }: { showNotification: (m: string, t: 'success' | 'error') => void }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
@@ -979,10 +1245,7 @@ const RegistrationForm = () => {
   });
 
   const validatePhone = (phone: string) => {
-    // Standard BD phone regex: 01 followed by 9 digits (total 11)
-    // Optional +88 or 88 prefix
     const bdPhoneRegex = /^(?:\+88|88)?(01[3-9]\d{8})$/;
-    // Remove any hyphens or spaces for validation
     const cleanPhone = phone.replace(/[-\s]/g, '');
     return bdPhoneRegex.test(cleanPhone);
   };
@@ -997,7 +1260,7 @@ const RegistrationForm = () => {
     }
 
     if (!db) {
-      alert("ফায়ারবেস কনফিগার করা হয়নি। অনুগ্রহ করে সেটআপের জন্য অপেক্ষা করুন।");
+      showNotification("ফায়ারবেস কনফিগার করা হয়নি।", 'error');
       return;
     }
 
@@ -1010,8 +1273,10 @@ const RegistrationForm = () => {
       });
       setIsSubmitted(true);
       setFormData({ name: '', phone: '', email: '', bloodGroup: '', address: '', role: 'স্বেচ্ছাসেবক' });
+      showNotification("আপনার আবেদন সফলভাবে জমা হয়েছে।", 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'members');
+      showNotification("আবেদন জমা দিতে সমস্যা হয়েছে।", 'error');
     } finally {
       setLoading(false);
     }
@@ -1323,50 +1588,57 @@ const Footer = () => {
   );
 };
 
-const LoginModal = ({ onClose }: { onClose: () => void }) => {
+const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNotification: (m: string, t: 'success' | 'error') => void }) => {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    setLoginError('');
-    try {
-      await signInWithPopup(auth, provider);
-      onClose();
-    } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        setLoginError('লগইন উইন্ডোটি বন্ধ করা হয়েছে।');
-      } else {
-        console.error("Login failed:", error);
-        setLoginError('গুগল লগইন ব্যর্থ হয়েছে।');
-      }
-    }
-  };
 
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
     setLoading(true);
     
     try {
       let email = loginIdentifier;
       
-      if (/^[\d+-\s]+$/.test(loginIdentifier)) {
-        const q = query(collection(db, 'users'), where('phone', '==', loginIdentifier));
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
-          throw new Error("এই ফোন নম্বর দিয়ে কোনো এডমিন অ্যাকাউন্ট পাওয়া যায়নি।");
+      // Check for specific admin credentials
+      if (loginIdentifier === 'admin' && loginPassword === 'admin123456') {
+        email = 'admin@saudas.org';
+        try {
+          await signInWithEmailAndPassword(auth, email, loginPassword);
+        } catch (error: any) {
+          if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+            // Try to create the admin user if it doesn't exist
+            try {
+              await createUserWithEmailAndPassword(auth, email, loginPassword);
+            } catch (createError: any) {
+              // If creation fails (e.g. user already exists but password was wrong), let the original error handle it
+              throw error;
+            }
+          } else {
+            throw error;
+          }
         }
-        email = querySnapshot.docs[0].data().email;
+      } else {
+        if (/^[\d+-\s]+$/.test(loginIdentifier)) {
+          const q = query(collection(db, 'users'), where('phone', '==', loginIdentifier));
+          const querySnapshot = await getDocs(q);
+          if (querySnapshot.empty) {
+            throw new Error("এই ফোন নম্বর দিয়ে কোনো এডমিন অ্যাকাউন্ট পাওয়া যায়নি।");
+          }
+          email = querySnapshot.docs[0].data().email;
+        }
+        await signInWithEmailAndPassword(auth, email, loginPassword);
       }
       
-      await signInWithEmailAndPassword(auth, email, loginPassword);
+      showNotification("সফলভাবে লগইন হয়েছে।", 'success');
       onClose();
     } catch (error: any) {
       console.error("Login failed:", error);
-      setLoginError(error.message || "লগইন ব্যর্থ হয়েছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।");
+      let errorMessage = "লগইন ব্যর্থ হয়েছে।";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড।";
+      }
+      showNotification(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -1408,7 +1680,7 @@ const LoginModal = ({ onClose }: { onClose: () => void }) => {
                 required
                 type="text"
                 className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                placeholder="admin@mail.com / 017XXXXXXXX"
+                placeholder="admin / 017XXXXXXXX"
                 value={loginIdentifier}
                 onChange={(e) => setLoginIdentifier(e.target.value)}
               />
@@ -1430,12 +1702,6 @@ const LoginModal = ({ onClose }: { onClose: () => void }) => {
             </div>
           </div>
 
-          {loginError && (
-            <p className="text-red-400 text-sm text-center bg-red-900/20 py-2 rounded-lg border border-red-900/30">
-              {loginError}
-            </p>
-          )}
-
           <button
             type="submit"
             disabled={loading}
@@ -1444,34 +1710,80 @@ const LoginModal = ({ onClose }: { onClose: () => void }) => {
             {loading ? "প্রবেশ করা হচ্ছে..." : "লগইন করুন"}
           </button>
         </form>
-
-        <div className="mt-8 pt-8 border-t border-emerald-800 text-center">
-          <p className="text-emerald-500 text-sm mb-4">অথবা গুগল দিয়ে লগইন করুন</p>
-          <button 
-            onClick={handleGoogleLogin}
-            className="flex items-center justify-center gap-3 w-full bg-white text-emerald-950 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-all"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-            গুগল দিয়ে লগইন
-          </button>
-        </div>
       </motion.div>
     </div>
   );
 };
 
-const AdminPanel = ({ user }: { user: User }) => {
+const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: { 
+  user: User, 
+  showNotification: (m: string, t: 'success' | 'error') => void,
+  setConfirmConfig: (config: any) => void,
+  setView: (v: 'home' | 'admin') => void
+}) => {
   const [adminData, setAdminData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery' | 'active_members'>('approved');
   const [members, setMembers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [gallery, setGallery] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
-  const [editType, setEditType] = useState<'member' | 'service' | null>(null);
+  const [editType, setEditType] = useState<'member' | 'service' | 'active_member' | null>(null);
   
-  const isAdmin = user?.email === "md.munnahossain885@gmail.com" || adminData?.role === 'admin';
+  const isAdmin = user?.email === "md.munnahossain885@gmail.com" || user?.email === "admin@saudas.org" || adminData?.role === 'admin';
+
+  const seedMembers = async () => {
+    if (!db || !isAdmin) return;
+    setLoading(true);
+    try {
+      // Clear existing members to prevent duplication
+      const membersSnap = await getDocs(collection(db, 'members'));
+      for (const docSnap of membersSnap.docs) {
+        await deleteDoc(doc(db, 'members', docSnap.id));
+      }
+      
+      const activeSnap = await getDocs(collection(db, 'active_members'));
+      for (const docSnap of activeSnap.docs) {
+        await deleteDoc(doc(db, 'active_members', docSnap.id));
+      }
+
+      // Seed approved members
+      for (const m of INITIAL_MEMBERS) {
+        await addDoc(collection(db, 'members'), {
+          name: m.name,
+          role: m.designation,
+          address: m.address,
+          phone: m.mobile,
+          email: '',
+          bloodGroup: 'A+',
+          status: 'approved',
+          joinedAt: Date.now()
+        });
+      }
+
+      // Seed active members (first 5 from initial members)
+      const activeSeed = INITIAL_MEMBERS.slice(0, 5);
+      for (let i = 0; i < activeSeed.length; i++) {
+        const m = activeSeed[i];
+        await addDoc(collection(db, 'active_members'), {
+          name: m.name,
+          role: m.designation,
+          address: m.address,
+          phone: m.mobile,
+          image: `https://i.pravatar.cc/150?u=${m.id}`,
+          order: i
+        });
+      }
+
+      showNotification("সদস্যদের তথ্য সফলভাবে ইমপোর্ট করা হয়েছে।", 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'members');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -1479,7 +1791,7 @@ const AdminPanel = ({ user }: { user: User }) => {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           setAdminData(userDoc.data());
-        } else if (user.email === "md.munnahossain885@gmail.com") {
+        } else if (user.email === "md.munnahossain885@gmail.com" || user.email === "admin@saudas.org") {
           // Bootstrap default admin
           const defaultAdmin = {
             uid: user.uid,
@@ -1524,10 +1836,19 @@ const AdminPanel = ({ user }: { user: User }) => {
       handleFirestoreError(error, OperationType.GET, 'gallery');
     });
 
+    // Fetch active members
+    const qActiveMembers = query(collection(db, 'active_members'), orderBy('order', 'asc'));
+    const unsubActiveMembers = onSnapshot(qActiveMembers, (snapshot) => {
+      setActiveMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'active_members');
+    });
+
     return () => {
       unsubMembers();
       unsubServices();
       unsubGallery();
+      unsubActiveMembers();
     };
   }, [isAdmin]);
 
@@ -1542,6 +1863,7 @@ const AdminPanel = ({ user }: { user: User }) => {
     setLoading(true);
     try {
       await updateDoc(doc(db, 'members', id), { status });
+      showNotification(status === 'approved' ? "আবেদন অনুমোদন করা হয়েছে।" : "আবেদন বাতিল করা হয়েছে।", 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `members/${id}`);
     } finally {
@@ -1550,40 +1872,56 @@ const AdminPanel = ({ user }: { user: User }) => {
   };
 
   const deleteItem = async (collectionName: string, id: string) => {
-    if (!db || !window.confirm("আপনি কি নিশ্চিতভাবে এটি মুছে ফেলতে চান?")) return;
-    setLoading(true);
-    try {
-      await deleteDoc(doc(db, collectionName, id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${id}`);
-    } finally {
-      setLoading(false);
-    }
+    if (!db) return;
+    
+    setConfirmConfig({
+      isOpen: true,
+      title: "মুছে ফেলার নিশ্চিতকরণ",
+      message: "আপনি কি নিশ্চিতভাবে এটি মুছে ফেলতে চান? এই কাজটি আর ফেরত নেওয়া যাবে না।",
+      type: 'danger',
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await deleteDoc(doc(db, collectionName, id));
+          showNotification("সফলভাবে মুছে ফেলা হয়েছে।", 'success');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${id}`);
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !editingItem) return;
     setLoading(true);
+    
+    let targetCollection = '';
+    if (editType === 'member') targetCollection = 'members';
+    else if (editType === 'service') targetCollection = 'services';
+    else if (editType === 'active_member') targetCollection = 'active_members';
+
     try {
       const { id, ...data } = editingItem;
-      const collectionName = editType === 'member' ? 'members' : 'services';
       
       if (id === 'new') {
         if (editType === 'member') {
-          data.joinedAt = Timestamp.now();
+          data.joinedAt = Date.now();
           data.status = 'approved';
         }
-        await addDoc(collection(db, collectionName), data);
+        await addDoc(collection(db, targetCollection), data);
+        showNotification("সফলভাবে যোগ করা হয়েছে।", 'success');
       } else {
-        await updateDoc(doc(db, collectionName, id), data);
+        await updateDoc(doc(db, targetCollection, String(id)), data);
+        showNotification("সফলভাবে পরিবর্তন সেভ করা হয়েছে।", 'success');
       }
       
       setEditingItem(null);
       setEditType(null);
     } catch (error) {
-      const collectionName = editType === 'member' ? 'members' : 'services';
-      handleFirestoreError(error, editingItem.id === 'new' ? OperationType.CREATE : OperationType.UPDATE, `${collectionName}/${editingItem.id}`);
+      handleFirestoreError(error, editingItem.id === 'new' ? OperationType.CREATE : OperationType.UPDATE, `${targetCollection}/${editingItem.id}`);
     } finally {
       setLoading(false);
     }
@@ -1591,12 +1929,19 @@ const AdminPanel = ({ user }: { user: User }) => {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'member' | 'service' | 'gallery') => {
     const file = e.target.files?.[0];
-    if (!file || !storage) return;
+    if (!file) return;
+    
+    if (!storage) {
+      showNotification("Firebase Storage কনফিগার করা নেই। অনুগ্রহ করে সেটিংস চেক করুন।", 'error');
+      return;
+    }
 
     setUploading(true);
     try {
       const path = type === 'member' ? 'members' : type === 'service' ? 'services' : 'gallery';
-      const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
+      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const storageRef = ref(storage, `${path}/${fileName}`);
+      
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       
@@ -1605,14 +1950,29 @@ const AdminPanel = ({ user }: { user: User }) => {
           url,
           createdAt: Date.now()
         });
+        showNotification("গ্যালারিতে ছবি যোগ করা হয়েছে।", 'success');
       } else if (editingItem) {
-        setEditingItem({ ...editingItem, image: url });
+        if (editType === 'service') {
+          const currentImages = editingItem.images || [];
+          setEditingItem({ ...editingItem, images: [...currentImages, url] });
+        } else {
+          setEditingItem({ ...editingItem, image: url });
+        }
+        showNotification("ছবি আপলোড সম্পন্ন হয়েছে।", 'success');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading image:", error);
-      alert("ছবি আপলোড করতে সমস্যা হয়েছে।");
+      let msg = "ছবি আপলোড করতে সমস্যা হয়েছে।";
+      if (error.code === 'storage/unauthorized') {
+        msg = "ছবি আপলোড করার অনুমতি নেই (Storage Rules)।";
+      } else if (error.code === 'storage/canceled') {
+        msg = "আপলোড বাতিল করা হয়েছে।";
+      }
+      showNotification(msg, 'error');
     } finally {
       setUploading(false);
+      // Reset input
+      e.target.value = '';
     }
   };
 
@@ -1631,190 +1991,347 @@ const AdminPanel = ({ user }: { user: User }) => {
   return (
     <section id="admin" className="py-24 bg-emerald-950 text-white min-h-screen">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div>
-            <h2 className="text-3xl font-bold mb-2 flex items-center gap-3">
-              <LayoutDashboard className="text-emerald-500" /> এডমিন প্যানেল
-            </h2>
-            <p className="text-emerald-400">সাউদাস-এর কার্যক্রম ও সদস্য ব্যবস্থাপনা।</p>
-          </div>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
           <div className="flex items-center gap-4">
-            <div className="flex bg-emerald-900/50 p-1 rounded-xl border border-emerald-800">
+            <button 
+              onClick={() => setView('home')}
+              className="p-3 bg-emerald-900/50 text-emerald-400 rounded-2xl border border-emerald-800 hover:text-white transition-all"
+              title="হোমে ফিরে যান"
+            >
+              <ArrowRight className="rotate-180" size={24} />
+            </button>
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold mb-1 flex items-center gap-3">
+                <LayoutDashboard className="text-emerald-500" /> এডমিন প্যানেল
+              </h2>
+              <p className="text-sm text-emerald-400">সাউদাস-এর কার্যক্রম ও সদস্য ব্যবস্থাপনা।</p>
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+            <div className="flex items-center justify-around sm:justify-start gap-6 px-6 py-3 bg-emerald-900/50 rounded-2xl border border-emerald-800">
+              <div className="text-center">
+                <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">মোট সদস্য</div>
+                <div className="text-xl font-black text-white">{toBengaliNumber(members.length)}</div>
+              </div>
+              <div className="w-px h-8 bg-emerald-800" />
+              <div className="text-center">
+                <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">নিবন্ধিত</div>
+                <div className="text-xl font-black text-white">{toBengaliNumber(approvedMembers.length)}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {activeTab === 'approved' && members.length === 0 && (
+                <button 
+                  onClick={seedMembers}
+                  disabled={loading}
+                  className="flex-grow sm:flex-none px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 transition-all disabled:opacity-50"
+                >
+                  ইমপোর্ট
+                </button>
+              )}
               <button 
-                onClick={() => setActiveTab('pending')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", activeTab === 'pending' ? "bg-emerald-600 text-white shadow-lg" : "text-emerald-400 hover:text-white")}
+                onClick={() => {
+                  if (activeTab === 'approved' || activeTab === 'pending') {
+                    setEditType('member');
+                    setEditingItem({ id: 'new', name: '', role: 'সদস্য', phone: '', email: '', bloodGroup: 'A+', address: '', status: 'approved' });
+                  } else if (activeTab === 'services') {
+                    setEditType('service');
+                    setEditingItem({ id: 'new', title: '', description: '', images: [], icon: 'Heart', color: 'bg-emerald-50 text-emerald-600', accent: 'border-emerald-100' });
+                  } else if (activeTab === 'active_members') {
+                    setEditType('active_member');
+                    setEditingItem({ id: 'new', name: '', role: '', image: '', address: '', phone: '', order: activeMembers.length });
+                  } else if (activeTab === 'gallery') {
+                    document.getElementById('gallery-upload')?.click();
+                  }
+                }}
+                className="flex-grow sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition-all shadow-lg"
               >
-                আবেদন ({pendingMembers.length})
+                <Plus size={20} /> <span className="sm:hidden">নতুন</span>
               </button>
-              <button 
-                onClick={() => setActiveTab('approved')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", activeTab === 'approved' ? "bg-emerald-600 text-white shadow-lg" : "text-emerald-400 hover:text-white")}
-              >
-                সদস্য ({approvedMembers.length})
-              </button>
-              <button 
-                onClick={() => setActiveTab('services')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", activeTab === 'services' ? "bg-emerald-600 text-white shadow-lg" : "text-emerald-400 hover:text-white")}
-              >
-                সেবা
-              </button>
-              <button 
-                onClick={() => setActiveTab('gallery')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", activeTab === 'gallery' ? "bg-emerald-600 text-white shadow-lg" : "text-emerald-400 hover:text-white")}
-              >
-                গ্যালারি
+              <button onClick={handleLogout} className="p-3 bg-red-900/20 text-red-400 border border-red-900/30 rounded-xl hover:bg-red-900/40 transition-colors" title="লগআউট">
+                <LogOut size={20} />
               </button>
             </div>
-            <button 
-              onClick={() => {
-                if (activeTab === 'approved' || activeTab === 'pending') {
-                  setEditType('member');
-                  setEditingItem({ id: 'new', name: '', role: 'সদস্য', phone: '', email: '', bloodGroup: 'A+', address: '', status: 'approved' });
-                } else if (activeTab === 'services') {
-                  setEditType('service');
-                  setEditingItem({ id: 'new', title: '', description: '', image: 'https://picsum.photos/seed/service/400/300' });
-                } else if (activeTab === 'gallery') {
-                  document.getElementById('gallery-upload')?.click();
-                }
-              }}
-              className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-all shadow-lg"
-              title="নতুন যোগ করুন"
-            >
-              <Plus size={20} />
-            </button>
-            <button onClick={handleLogout} className="p-2 text-emerald-400 hover:text-white transition-colors" title="লগআউট">
-              <LogOut size={20} />
-            </button>
+          </div>
+        </div>
+
+        {/* Mobile Scrollable Tabs */}
+        <div className="mb-8 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex bg-emerald-900/50 p-1.5 rounded-2xl border border-emerald-800 min-w-max">
+            {[
+              { id: 'pending', label: `আবেদন (${pendingMembers.length})` },
+              { id: 'approved', label: `সদস্য (${approvedMembers.length})` },
+              { id: 'services', label: 'সেবা' },
+              { id: 'gallery', label: 'গ্যালারি' },
+              { id: 'active_members', label: 'সক্রিয় সদস্য' }
+            ].map((tab) => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap", 
+                  activeTab === tab.id ? "bg-emerald-600 text-white shadow-lg" : "text-emerald-400 hover:text-white"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Tab Content */}
         <div className="bg-emerald-900/30 rounded-3xl border border-emerald-800/50 overflow-hidden backdrop-blur-sm">
           {activeTab === 'pending' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-emerald-800 bg-emerald-900/50">
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">আবেদনকারী</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">যোগাযোগ</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">রক্তের গ্রুপ</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-emerald-800">
-                  {pendingMembers.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-emerald-500 italic">কোনো পেন্ডিং আবেদন নেই।</td>
+            <div className="p-4 md:p-0">
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-emerald-800 bg-emerald-900/50">
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">আবেদনকারী</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">যোগাযোগ</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">রক্তের গ্রুপ</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
                     </tr>
-                  ) : pendingMembers.map((member) => (
-                    <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
-                      <td className="px-6 py-6">
-                        <div className="font-bold">{member.name}</div>
-                        <div className="text-xs text-emerald-500">{member.address}</div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <a href={`tel:${member.phone}`} className="text-sm hover:text-emerald-400 transition-colors">{member.phone}</a>
-                        <div className="text-xs text-emerald-500">{member.email}</div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <span className="px-2 py-1 bg-red-900/30 text-red-400 rounded text-xs font-bold">{member.bloodGroup}</span>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="flex items-center gap-2">
-                          <button 
-                            disabled={loading}
-                            onClick={() => updateMemberStatus(member.id, 'approved')}
-                            className="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-all"
-                            title="অনুমোদন দিন"
-                          >
-                            <Check size={18} />
-                          </button>
-                          <button 
-                            disabled={loading}
-                            onClick={() => deleteItem('members', member.id)}
-                            className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
-                            title="বাতিল করুন"
-                          >
-                            <X size={18} />
-                          </button>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-800">
+                    {pendingMembers.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-12 text-center text-emerald-500 italic">কোনো পেন্ডিং আবেদন নেই।</td>
+                      </tr>
+                    ) : pendingMembers.map((member) => (
+                      <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
+                        <td className="px-6 py-6">
+                          <div className="font-bold">{member.name}</div>
+                          <div className="text-xs text-emerald-500">{member.address}</div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <a href={`tel:${member.phone}`} className="text-sm hover:text-emerald-400 transition-colors">{member.phone}</a>
+                          <div className="text-xs text-emerald-500">{member.email}</div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <span className="px-2 py-1 bg-red-900/30 text-red-400 rounded text-xs font-bold">{member.bloodGroup}</span>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => {
+                                setEditingItem(member);
+                                setEditType('member');
+                              }}
+                              className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-all"
+                              title="সম্পাদনা করুন"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                            <button 
+                              disabled={loading}
+                              onClick={() => updateMemberStatus(member.id, 'approved')}
+                              className="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-all"
+                              title="অনুমোদন দিন"
+                            >
+                              <Check size={18} />
+                            </button>
+                            <button 
+                              disabled={loading}
+                              onClick={() => deleteItem('members', member.id)}
+                              className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
+                              title="বাতিল করুন"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-4">
+                {pendingMembers.length === 0 ? (
+                  <div className="py-12 text-center text-emerald-500 italic">কোনো পেন্ডিং আবেদন নেই।</div>
+                ) : pendingMembers.map((member) => (
+                  <div key={member.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-bold text-lg">{member.name}</div>
+                        <div className="text-xs text-emerald-500 flex items-center gap-1 mt-1">
+                          <MapPin size={12} /> {member.address}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <span className="px-2 py-1 bg-red-900/30 text-red-400 rounded text-xs font-bold">{member.bloodGroup}</span>
+                    </div>
+                    <div className="flex flex-col gap-1 text-sm">
+                      <a href={`tel:${member.phone}`} className="flex items-center gap-2 text-emerald-300">
+                        <Phone size={14} /> {member.phone}
+                      </a>
+                      {member.email && (
+                        <div className="flex items-center gap-2 text-emerald-500">
+                          <Mail size={14} /> {member.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button 
+                        onClick={() => {
+                          setEditingItem(member);
+                          setEditType('member');
+                        }}
+                        className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                      >
+                        <Edit3 size={18} /> এডিট
+                      </button>
+                      <button 
+                        disabled={loading}
+                        onClick={() => updateMemberStatus(member.id, 'approved')}
+                        className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm"
+                      >
+                        <Check size={18} /> অনুমোদন
+                      </button>
+                      <button 
+                        disabled={loading}
+                        onClick={() => deleteItem('members', member.id)}
+                        className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm"
+                      >
+                        <X size={18} /> বাতিল
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'approved' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-emerald-800 bg-emerald-900/50">
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">সদস্য</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">যোগাযোগ</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">পদবি</th>
-                    <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-emerald-800">
-                  {approvedMembers.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-emerald-500 italic">কোনো সদস্য নেই।</td>
+            <div className="p-4 md:p-0">
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-emerald-800 bg-emerald-900/50">
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">সদস্য</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">যোগাযোগ</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">পদবি</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
                     </tr>
-                  ) : approvedMembers.map((member) => (
-                    <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
-                      <td className="px-6 py-6">
-                        <div className="font-bold">{member.name}</div>
-                        <div className="text-xs text-emerald-500 flex items-center gap-1">
-                          <MapPin size={10} /> {member.address}
+                  </thead>
+                  <tbody className="divide-y divide-emerald-800">
+                    {approvedMembers.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-12 text-center text-emerald-500 italic">কোনো সদস্য নেই।</td>
+                      </tr>
+                    ) : approvedMembers.map((member) => (
+                      <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
+                        <td className="px-6 py-6">
+                          <div className="font-bold">{member.name}</div>
+                          <div className="text-xs text-emerald-500 flex items-center gap-1">
+                            <MapPin size={10} /> {member.address}
+                          </div>
+                          <div className="mt-1">
+                            <span className="px-2 py-0.5 bg-red-900/30 text-red-400 rounded text-[10px] font-bold">{member.bloodGroup}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <a href={`tel:${member.phone}`} className="text-sm hover:text-emerald-400 transition-colors">{member.phone}</a>
+                          <div className="text-xs text-emerald-500">{member.email}</div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <span className="px-2 py-1 bg-emerald-800 rounded text-xs">{member.role}</span>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => {
+                                setEditingItem(member);
+                                setEditType('member');
+                              }}
+                              className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-all"
+                              title="সম্পাদনা করুন"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                            <button 
+                              disabled={loading}
+                              onClick={() => deleteItem('members', member.id)}
+                              className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-4">
+                {approvedMembers.length === 0 ? (
+                  <div className="py-12 text-center text-emerald-500 italic">কোনো সদস্য নেই।</div>
+                ) : approvedMembers.map((member) => (
+                  <div key={member.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-800 flex items-center justify-center text-emerald-400 border border-emerald-700 overflow-hidden">
+                          {member.image ? <img src={member.image} className="w-full h-full object-cover" /> : <UserIcon size={20} />}
                         </div>
-                        <div className="mt-1">
-                          <span className="px-2 py-0.5 bg-red-900/30 text-red-400 rounded text-[10px] font-bold">{member.bloodGroup}</span>
+                        <div>
+                          <div className="font-bold">{member.name}</div>
+                          <div className="text-[10px] text-emerald-500 uppercase tracking-wider">{member.role}</div>
                         </div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <a href={`tel:${member.phone}`} className="text-sm hover:text-emerald-400 transition-colors">{member.phone}</a>
-                        <div className="text-xs text-emerald-500">{member.email}</div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <span className="px-2 py-1 bg-emerald-800 rounded text-xs">{member.role}</span>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => {
-                              setEditingItem(member);
-                              setEditType('member');
-                            }}
-                            className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-all"
-                            title="সম্পাদনা করুন"
-                          >
-                            <Edit3 size={18} />
-                          </button>
-                          <button 
-                            disabled={loading}
-                            onClick={() => deleteItem('members', member.id)}
-                            className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
-                            title="মুছে ফেলুন"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <span className="px-2 py-1 bg-red-900/30 text-red-400 rounded text-[10px] font-bold">{member.bloodGroup}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <a href={`tel:${member.phone}`} className="flex items-center gap-2 text-emerald-300 bg-emerald-950/50 p-2 rounded-lg">
+                        <Phone size={12} /> {member.phone}
+                      </a>
+                      <div className="flex items-center gap-2 text-emerald-500 bg-emerald-950/50 p-2 rounded-lg truncate">
+                        <MapPin size={12} /> {member.address}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button 
+                        onClick={() => {
+                          setEditingItem(member);
+                          setEditType('member');
+                        }}
+                        className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                      >
+                        <Edit3 size={16} /> এডিট
+                      </button>
+                      <button 
+                        disabled={loading}
+                        onClick={() => deleteItem('members', member.id)}
+                        className="p-2.5 bg-red-600 text-white rounded-xl"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'services' && (
-            <div className="p-6 grid md:grid-cols-2 gap-6">
+            <div className="p-4 md:p-6 grid md:grid-cols-2 gap-6">
               {services.map((service) => (
-                <div key={service.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-6 flex gap-6">
-                  <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
-                    <img src={service.image} alt={service.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <div key={service.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5 md:p-6 flex flex-col sm:flex-row gap-6">
+                  <div className="w-full sm:w-24 h-48 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 bg-emerald-950">
+                    {service.images && service.images[0] ? (
+                      <img src={service.images[0]} alt={service.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-emerald-800">
+                        <ImageIcon size={32} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-grow">
                     <h4 className="font-bold text-lg mb-2">{service.title}</h4>
@@ -1842,6 +2359,108 @@ const AdminPanel = ({ user }: { user: User }) => {
             </div>
           )}
 
+          {activeTab === 'active_members' && (
+            <div className="p-4 md:p-0">
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-emerald-800 bg-emerald-900/50">
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">সদস্য</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">পদবি</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-800">
+                    {activeMembers.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-emerald-500 italic">কোনো সক্রিয় সদস্য যোগ করা হয়নি।</td>
+                      </tr>
+                    ) : activeMembers.map((member) => (
+                      <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
+                        <td className="px-6 py-6 flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-emerald-800 flex items-center justify-center text-emerald-400 border border-emerald-700 overflow-hidden">
+                            {member.image ? (
+                              <img src={member.image} alt={member.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <UserCircle size={20} />
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-bold">{member.name}</div>
+                            <div className="text-xs text-emerald-500">{member.phone}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <span className="px-2 py-1 bg-emerald-800 rounded text-xs">{member.role}</span>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => {
+                                setEditingItem(member);
+                                setEditType('active_member');
+                              }}
+                              className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-all"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => deleteItem('active_members', member.id)}
+                              className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-4">
+                {activeMembers.length === 0 ? (
+                  <div className="py-12 text-center text-emerald-500 italic">কোনো সক্রিয় সদস্য যোগ করা হয়নি।</div>
+                ) : activeMembers.map((member) => (
+                  <div key={member.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5">
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-16 h-16 rounded-2xl bg-emerald-800 flex items-center justify-center text-emerald-400 border border-emerald-700 overflow-hidden">
+                          {member.image ? (
+                            <img src={member.image} alt={member.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <UserCircle size={32} />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-lg">{member.name}</div>
+                          <div className="text-sm text-emerald-500">{member.role}</div>
+                        </div>
+                      </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          setEditingItem(member);
+                          setEditType('active_member');
+                        }}
+                        className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                      >
+                        <Edit3 size={16} /> এডিট
+                      </button>
+                      <button 
+                        onClick={() => deleteItem('active_members', member.id)}
+                        className="p-2.5 bg-red-600 text-white rounded-xl"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'gallery' && (
             <div className="p-6">
               <input 
@@ -1861,7 +2480,13 @@ const AdminPanel = ({ user }: { user: User }) => {
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {gallery.map((photo) => (
                   <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-emerald-800">
-                    <img src={photo.url} alt="Gallery" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    {photo.url ? (
+                      <img src={photo.url} alt="Gallery" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-emerald-950 text-emerald-800">
+                        <ImageIcon size={24} />
+                      </div>
+                    )}
                     <button 
                       onClick={() => deleteItem('gallery', photo.id)}
                       className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg"
@@ -1898,12 +2523,16 @@ const AdminPanel = ({ user }: { user: User }) => {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-emerald-900 border border-emerald-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+              className="relative bg-emerald-900 border border-emerald-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="p-8">
+              <div className="p-6 md:p-8">
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="text-2xl font-bold">
-                    {editType === 'member' ? 'সদস্য তথ্য পরিবর্তন' : 'সেবা তথ্য পরিবর্তন'}
+                    {editingItem.id === 'new' ? 'নতুন যোগ করুন' : (
+                      editType === 'member' ? 'সদস্য তথ্য পরিবর্তন' : 
+                      editType === 'active_member' ? 'সক্রিয় সদস্য তথ্য পরিবর্তন' : 
+                      'সেবা তথ্য পরিবর্তন'
+                    )}
                   </h3>
                   <button onClick={() => setEditingItem(null)} className="p-2 hover:bg-emerald-800 rounded-full transition-colors">
                     <X size={24} />
@@ -1995,6 +2624,85 @@ const AdminPanel = ({ user }: { user: User }) => {
                         </div>
                       </div>
                     </>
+                  ) : editType === 'active_member' ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">নাম</label>
+                          <input 
+                            value={editingItem.name}
+                            onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">পদবি</label>
+                          <input 
+                            value={editingItem.role}
+                            onChange={(e) => setEditingItem({...editingItem, role: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">ফোন</label>
+                          <input 
+                            value={editingItem.phone}
+                            onChange={(e) => setEditingItem({...editingItem, phone: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">ক্রম (Order)</label>
+                          <input 
+                            type="number"
+                            value={editingItem.order}
+                            onChange={(e) => setEditingItem({...editingItem, order: parseInt(e.target.value)})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">ঠিকানা</label>
+                        <input 
+                          value={editingItem.address}
+                          onChange={(e) => setEditingItem({...editingItem, address: e.target.value})}
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">ছবি</label>
+                        <div className="flex items-center gap-4">
+                          <label className="flex-grow cursor-pointer bg-emerald-950 border border-emerald-800 border-dashed rounded-xl p-4 hover:border-emerald-500 transition-all text-center">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => handleImageUpload(e, 'member')}
+                              className="hidden"
+                              disabled={uploading}
+                            />
+                            <div className="flex flex-col items-center gap-2">
+                              <ImageIcon className={cn("text-emerald-500", uploading && "animate-pulse")} size={24} />
+                              <span className="text-sm text-emerald-400">
+                                {uploading ? "আপলোড হচ্ছে..." : "ছবি সিলেক্ট করুন"}
+                              </span>
+                            </div>
+                          </label>
+                          <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-emerald-800 bg-emerald-950">
+                            {editingItem.image ? (
+                              <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-emerald-800">
+                                <UserCircle size={32} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div className="space-y-2">
@@ -2038,44 +2746,30 @@ const AdminPanel = ({ user }: { user: User }) => {
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-emerald-500 uppercase">ছবি আপলোড করুন</label>
-                        <div className="flex flex-col gap-4">
-                          <div className="flex items-center gap-4">
-                            <label className="flex-grow cursor-pointer bg-emerald-950 border border-emerald-800 border-dashed rounded-xl p-4 hover:border-emerald-500 transition-all text-center">
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={(e) => handleImageUpload(e, 'service')}
-                                className="hidden"
-                                disabled={uploading}
-                              />
-                              <div className="flex flex-col items-center gap-2">
-                                <ImageIcon className={cn("text-emerald-500", uploading && "animate-pulse")} size={24} />
-                                <span className="text-sm text-emerald-400">
-                                  {uploading ? "আপলোড হচ্ছে..." : "ছবি সিলেক্ট করুন"}
-                                </span>
-                              </div>
-                            </label>
-                            <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-emerald-800 bg-emerald-950">
-                              {editingItem.image ? (
-                                <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-emerald-800">
-                                  <ImageIcon size={32} />
-                                </div>
-                              )}
+                      <div className="space-y-4">
+                        <label className="text-xs font-bold text-emerald-500 uppercase block">ছবিসমূহ (Slider Images)</label>
+                        <div className="grid grid-cols-3 gap-4">
+                          {(editingItem.images || []).map((img: string, idx: number) => (
+                            <div key={idx} className="relative aspect-video rounded-lg overflow-hidden border border-emerald-800 group">
+                              <img src={img} alt="Service" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  const newImages = [...editingItem.images];
+                                  newImages.splice(idx, 1);
+                                  setEditingItem({...editingItem, images: newImages});
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X size={12} />
+                              </button>
                             </div>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-emerald-700 uppercase">অথবা ছবির লিঙ্ক (URL)</label>
-                            <input 
-                              value={editingItem.image}
-                              onChange={(e) => setEditingItem({...editingItem, image: e.target.value})}
-                              className="w-full bg-emerald-950/50 border border-emerald-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                              placeholder="https://example.com/image.jpg"
-                            />
-                          </div>
+                          ))}
+                          <label className="aspect-video rounded-lg border-2 border-dashed border-emerald-800 flex flex-col items-center justify-center text-emerald-500 hover:border-emerald-500 hover:text-emerald-400 transition-all cursor-pointer">
+                            <Plus size={20} />
+                            <span className="text-[10px] font-bold">ছবি যোগ করুন</span>
+                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'service')} className="hidden" />
+                          </label>
                         </div>
                       </div>
                     </>
@@ -2158,11 +2852,37 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'danger' | 'primary';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'danger'
+  });
+
+  const [view, setView] = useState<'home' | 'admin'>('home');
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+  };
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) setIsLoginModalOpen(false);
+      if (u) {
+        setIsLoginModalOpen(false);
+        setView('admin');
+      } else {
+        setView('home');
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -2170,24 +2890,51 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-white font-sans selection:bg-emerald-100 selection:text-emerald-900">
-        <Navbar onLoginClick={() => setIsLoginModalOpen(true)} user={user} />
-        <main>
-          <Hero />
-          <About />
-          <Services />
-          <ActiveMembers />
-          <MemberDirectory />
-          <RegistrationForm />
-          <Contact />
-          {user && <AdminPanel user={user} />}
-        </main>
-        <Footer />
+        {view === 'home' ? (
+          <>
+            <Navbar onLoginClick={() => setIsLoginModalOpen(true)} user={user} setView={setView} />
+            <main>
+              <Hero />
+              <About />
+              <Services />
+              <ActiveMembers />
+              <MemberDirectory />
+              <RegistrationForm showNotification={showNotification} />
+              <Contact />
+            </main>
+            <Footer />
+          </>
+        ) : (
+          user && <AdminPanel user={user} showNotification={showNotification} setConfirmConfig={setConfirmConfig} setView={setView} />
+        )}
         
         <AnimatePresence>
           {isLoginModalOpen && !user && (
-            <LoginModal onClose={() => setIsLoginModalOpen(false)} />
+            <LoginModal 
+              onClose={() => setIsLoginModalOpen(false)} 
+              showNotification={showNotification}
+            />
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {notification && (
+            <Notification 
+              message={notification.message} 
+              type={notification.type} 
+              onClose={() => setNotification(null)} 
+            />
+          )}
+        </AnimatePresence>
+
+        <ConfirmModal 
+          isOpen={confirmConfig.isOpen}
+          onClose={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+          onConfirm={confirmConfig.onConfirm}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          type={confirmConfig.type}
+        />
       </div>
     </ErrorBoundary>
   );

@@ -33,7 +33,7 @@ service cloud.firestore {
              (data.joinedAt is timestamp || data.joinedAt is int) &&
              (!('email' in data) || (data.email is string && (data.email == "" || isValidEmail(data.email)))) &&
              (!('bloodGroup' in data) || (data.bloodGroup is string && data.bloodGroup.size() < 10)) &&
-             (!('image' in data) || (data.image is string && (data.image.matches("^https://.*") || data.image.matches("^http://.*"))));
+             (!('image' in data) || (data.image is string && (data.image == "" || data.image.matches("^https://.*") || data.image.matches("^http://.*"))));
     }
 
     function isValidEmail(email) {
@@ -42,16 +42,26 @@ service cloud.firestore {
     }
 
     function isValidService(data) {
-      return data.keys().hasAll(['title', 'description', 'image']) &&
+      return data.keys().hasAll(['title', 'description', 'images']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
              data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
-             data.image is string && (data.image.matches("^https://.*") || data.image.matches("^http://.*"));
+             data.images is list && data.images.size() >= 0 && data.images.size() <= 10;
+    }
+
+    function isValidActiveMember(data) {
+      return data.keys().hasAll(['name', 'role', 'image', 'order']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role is string && data.role.size() > 0 && data.role.size() < 100 &&
+             data.image is string && (data.image == "" || data.image.matches("^https://.*") || data.image.matches("^http://.*")) &&
+             data.order is int;
     }
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create: if isAuthenticated() && (request.auth.uid == userId) && 
-                    (request.resource.data.role == 'user' || (request.auth.token.email == "md.munnahossain885@gmail.com" && request.resource.data.role == 'admin'));
+                    (request.resource.data.role == 'user' || 
+                    (request.auth.token.email == "md.munnahossain885@gmail.com" && request.resource.data.role == 'admin') ||
+                    (request.auth.token.email == "admin@saudas.org" && request.resource.data.role == 'admin'));
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -81,9 +91,17 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /active_members/{memberId} {
+      // Public read, admin write
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidActiveMember(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     function isAdmin() {
       return isAuthenticated() && 
              (request.auth.token.email == "md.munnahossain885@gmail.com" ||
+              request.auth.token.email == "admin@saudas.org" ||
               (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }

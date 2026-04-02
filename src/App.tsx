@@ -292,7 +292,7 @@ const Notification = ({ message, type, onClose }: { message: string, type: 'succ
   );
 };
 
-const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, user: User | null, setView: (v: 'home' | 'admin') => void }) => {
+const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, user: User | null, setView: (v: 'home' | 'admin' | 'payment') => void }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -363,24 +363,24 @@ const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, use
               </button>
             ) : (
               <button
-                onClick={onLoginClick}
-                className={cn(
-                  "p-2 rounded-full transition-all hover:bg-emerald-500/10",
-                  isScrolled ? "text-emerald-900" : "text-white"
-                )}
-                title="লগইন"
-              >
-                <LogIn size={20} />
-              </button>
-            )}
-            <a
-              href="#join"
-              className="bg-emerald-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
+              onClick={() => setView('payment')}
+              className={cn(
+                "p-2 rounded-full transition-all hover:bg-emerald-500/10",
+                isScrolled ? "text-emerald-900" : "text-white"
+              )}
+              title="লগইন"
             >
-              দান করুন
-            </a>
-          </div>
+              <LogIn size={20} />
+            </button>
+          )}
+          <button
+            onClick={() => setView('payment')}
+            className="bg-emerald-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
+          >
+            দান করুন
+          </button>
         </div>
+      </div>
 
         {/* Mobile Menu Toggle */}
         <div className="flex items-center gap-4 md:hidden">
@@ -447,7 +447,7 @@ const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, use
     </nav>
   );
 };
-const Hero = () => {
+const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void }) => {
   const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(50);
 
@@ -510,12 +510,12 @@ const Hero = () => {
               সদস্য হন
               <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
             </a>
-            <a
-              href="#donate"
+            <button
+              onClick={() => setView('payment')}
               className="bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20"
             >
               দান করুন
-            </a>
+            </button>
           </div>
 
           <div className="mt-12 flex items-center gap-6">
@@ -1033,7 +1033,7 @@ const MemberDirectory = () => {
       let q = query(
         collection(db, 'members'), 
         where('status', '==', 'approved'), 
-        orderBy('joinedAt', 'desc'),
+        orderBy('joinedAt', 'asc'),
         limit(PAGE_SIZE)
       );
 
@@ -1041,7 +1041,7 @@ const MemberDirectory = () => {
         q = query(
           collection(db, 'members'), 
           where('status', '==', 'approved'), 
-          orderBy('joinedAt', 'desc'),
+          orderBy('joinedAt', 'asc'),
           startAfter(lastDoc),
           limit(PAGE_SIZE)
         );
@@ -1071,7 +1071,8 @@ const MemberDirectory = () => {
 
   // Combine hardcoded members with database members
   const allMembers = [
-    ...INITIAL_MEMBERS.map(m => ({
+    ...dbMembers,
+    ...INITIAL_MEMBERS.filter(im => !dbMembers.some(dm => dm.phone === im.mobile)).map(m => ({
       id: `static-${m.id}`,
       name: m.name,
       role: m.designation,
@@ -1080,10 +1081,15 @@ const MemberDirectory = () => {
       email: '',
       bloodGroup: 'N/A',
       status: 'approved',
-      isStatic: true
-    })),
-    ...dbMembers
-  ];
+      isStatic: true,
+      joinedAt: m.id // Use ID as a sort key for static members
+    }))
+  ].sort((a, b) => {
+    // Always keep the President at the top
+    if (a.name === "মো: হুমায়ূন কবীর") return -1;
+    if (b.name === "মো: হুমায়ূন কবীর") return 1;
+    return (a.joinedAt || 0) - (b.joinedAt || 0);
+  });
 
   const roles = ["সব", ...Array.from(new Set(allMembers.map(m => m.role).filter(Boolean)))];
 
@@ -1513,7 +1519,7 @@ const Contact = () => {
   );
 };
 
-const Footer = () => {
+const Footer = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void }) => {
   return (
     <footer className="bg-emerald-950 text-white pt-20 pb-10">
       <div className="max-w-7xl mx-auto px-6">
@@ -1556,6 +1562,7 @@ const Footer = () => {
               <li><a href="#about" className="hover:text-emerald-400 transition-colors">আমাদের সম্পর্কে</a></li>
               <li><a href="#services" className="hover:text-emerald-400 transition-colors">আমাদের সেবাসমূহ</a></li>
               <li><a href="#members" className="hover:text-emerald-400 transition-colors">সদস্যগণ</a></li>
+              <li><button onClick={() => setView('payment')} className="hover:text-emerald-400 transition-colors">দান করুন</button></li>
               <li><a href="#join" className="hover:text-emerald-400 transition-colors">যুক্ত হোন</a></li>
             </ul>
           </div>
@@ -1759,7 +1766,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
           email: '',
           bloodGroup: 'A+',
           status: 'approved',
-          joinedAt: Date.now()
+          joinedAt: m.id
         });
       }
 
@@ -1813,7 +1820,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
     if (!isAdmin || !db) return;
 
     // Fetch members
-    const qMembers = query(collection(db, 'members'), orderBy('joinedAt', 'desc'));
+    const qMembers = query(collection(db, 'members'), orderBy('joinedAt', 'asc'));
     const unsubMembers = onSnapshot(qMembers, (snapshot) => {
       setMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => {
@@ -1904,11 +1911,11 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
     else if (editType === 'active_member') targetCollection = 'active_members';
 
     try {
-      const { id, ...data } = editingItem;
+      const { id, isStatic, ...data } = editingItem;
       
-      if (id === 'new') {
+      if (id === 'new' || isStatic) {
         if (editType === 'member') {
-          data.joinedAt = Date.now();
+          data.joinedAt = data.joinedAt || Date.now();
           data.status = 'approved';
         }
         await addDoc(collection(db, targetCollection), data);
@@ -1921,7 +1928,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
       setEditingItem(null);
       setEditType(null);
     } catch (error) {
-      handleFirestoreError(error, editingItem.id === 'new' ? OperationType.CREATE : OperationType.UPDATE, `${targetCollection}/${editingItem.id}`);
+      handleFirestoreError(error, (editingItem.id === 'new' || editingItem.isStatic) ? OperationType.CREATE : OperationType.UPDATE, `${targetCollection}/${editingItem.id}`);
     } finally {
       setLoading(false);
     }
@@ -1986,7 +1993,29 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
   }
 
   const pendingMembers = members.filter(m => m.status === 'pending');
-  const approvedMembers = members.filter(m => m.status === 'approved');
+  const dbApprovedMembers = members.filter(m => m.status === 'approved');
+  
+  // Combine with static members that aren't in the DB yet (matching by phone)
+  const approvedMembers = [
+    ...dbApprovedMembers,
+    ...INITIAL_MEMBERS.filter(im => !dbApprovedMembers.some(am => am.phone === im.mobile)).map(im => ({
+      id: `static-${im.id}`,
+      name: im.name,
+      role: im.designation,
+      address: im.address,
+      phone: im.mobile,
+      email: '',
+      bloodGroup: 'N/A',
+      status: 'approved',
+      isStatic: true,
+      joinedAt: im.id
+    }))
+  ].sort((a, b) => {
+    // Always keep the President at the top
+    if (a.name === "মো: হুমায়ূন কবীর") return -1;
+    if (b.name === "মো: হুমায়ূন কবীর") return 1;
+    return (a.joinedAt || 0) - (b.joinedAt || 0);
+  });
 
   return (
     <section id="admin" className="py-24 bg-emerald-950 text-white min-h-screen">
@@ -2022,7 +2051,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
             </div>
             
             <div className="flex items-center gap-2">
-              {activeTab === 'approved' && members.length === 0 && (
+              {activeTab === 'approved' && dbApprovedMembers.length < 10 && (
                 <button 
                   onClick={seedMembers}
                   disabled={loading}
@@ -2227,7 +2256,12 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                     ) : approvedMembers.map((member) => (
                       <tr key={member.id} className="hover:bg-emerald-900/30 transition-colors">
                         <td className="px-6 py-6">
-                          <div className="font-bold">{member.name}</div>
+                          <div className="font-bold flex items-center gap-2">
+                            {member.name}
+                            {member.isStatic && (
+                              <span className="px-1.5 py-0.5 bg-emerald-900/50 text-emerald-500 border border-emerald-800 rounded text-[8px] font-bold uppercase">Static</span>
+                            )}
+                          </div>
                           <div className="text-xs text-emerald-500 flex items-center gap-1">
                             <MapPin size={10} /> {member.address}
                           </div>
@@ -2282,7 +2316,12 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                           {member.image ? <img src={member.image} className="w-full h-full object-cover" /> : <UserIcon size={20} />}
                         </div>
                         <div>
-                          <div className="font-bold">{member.name}</div>
+                          <div className="font-bold flex items-center gap-2">
+                            {member.name}
+                            {member.isStatic && (
+                              <span className="px-1.5 py-0.5 bg-emerald-900/50 text-emerald-500 border border-emerald-800 rounded text-[8px] font-bold uppercase">Static</span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-emerald-500 uppercase tracking-wider">{member.role}</div>
                         </div>
                       </div>
@@ -2562,14 +2601,25 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-emerald-500 uppercase">মোবাইল নম্বর</label>
-                        <input 
-                          value={editingItem.phone}
-                          onChange={(e) => setEditingItem({...editingItem, phone: e.target.value})}
-                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          required
-                        />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">মোবাইল নম্বর</label>
+                          <input 
+                            value={editingItem.phone}
+                            onChange={(e) => setEditingItem({...editingItem, phone: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">ইমেইল</label>
+                          <input 
+                            type="email"
+                            value={editingItem.email || ''}
+                            onChange={(e) => setEditingItem({...editingItem, email: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -2579,7 +2629,8 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                             onChange={(e) => setEditingItem({...editingItem, bloodGroup: e.target.value})}
                             className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           >
-                            {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
+                            <option value="N/A">N/A</option>
+                            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
                               <option key={bg} value={bg}>{bg}</option>
                             ))}
                           </select>
@@ -2849,6 +2900,73 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+const PaymentPage = ({ onBack }: { onBack: () => void }) => {
+  return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 font-sans">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-2xl w-full text-center"
+      >
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-emerald-500 mb-4">আপনার সহযোগিতা প্রয়োজন</h1>
+          <p className="text-xl text-gray-800 mb-6">স্বাস্থ্যসেবা, শিক্ষা ও দারিদ্র্য বিমোচন</p>
+          <div className="max-w-xl mx-auto">
+            <p className="text-gray-600 leading-relaxed">
+              সাউদাস (সামাজিক উন্নয়ন দাতব্য সংস্থা) একটি অলাভজনক প্রতিষ্ঠান যা সমাজের অবহেলিত ও সুবিধাবঞ্চিত মানুষের কল্যাণে কাজ করে। আমাদের মূল লক্ষ্য হলো মানসম্মত স্বাস্থ্যসেবা নিশ্চিত করা, শিক্ষার আলো ছড়িয়ে দেওয়া এবং টেকসই উন্নয়ন প্রকল্পের মাধ্যমে দারিদ্র্য বিমোচন করা। আপনার সামান্য দান একজন মানুষের জীবন বদলে দিতে পারে।
+            </p>
+          </div>
+        </div>
+
+        {/* Payment Box */}
+        <div className="bg-gray-50 rounded-[2rem] p-8 md:p-12 border border-gray-100 mb-12">
+          <div className="space-y-8">
+            {/* bKash */}
+            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
+              <div className="text-left">
+                <h3 className="text-xl font-bold text-gray-800">বিকাশ (পার্সোনাল)</h3>
+                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
+              </div>
+              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
+            </div>
+
+            {/* Nagad */}
+            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
+              <div className="text-left">
+                <h3 className="text-xl font-bold text-gray-800">নগদ (পার্সোনাল)</h3>
+                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
+              </div>
+              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
+            </div>
+
+            {/* Rocket */}
+            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
+              <div className="text-left">
+                <h3 className="text-xl font-bold text-gray-800">রকেট (পার্সোনাল)</h3>
+                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
+              </div>
+              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Thank You Message */}
+        <div className="text-center">
+          <p className="text-2xl font-bold text-emerald-700 mb-8">ধন্যবাদ</p>
+          <button 
+            onClick={onBack}
+            className="text-gray-500 hover:text-emerald-600 transition-colors flex items-center gap-2 mx-auto font-medium"
+          >
+            <ChevronLeft size={20} />
+            হোম পেজে ফিরে যান
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -2867,7 +2985,7 @@ export default function App() {
     type: 'danger'
   });
 
-  const [view, setView] = useState<'home' | 'admin'>('home');
+  const [view, setView] = useState<'home' | 'admin' | 'payment'>('home');
 
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
@@ -2894,7 +3012,7 @@ export default function App() {
           <>
             <Navbar onLoginClick={() => setIsLoginModalOpen(true)} user={user} setView={setView} />
             <main>
-              <Hero />
+              <Hero setView={setView} />
               <About />
               <Services />
               <ActiveMembers />
@@ -2902,8 +3020,10 @@ export default function App() {
               <RegistrationForm showNotification={showNotification} />
               <Contact />
             </main>
-            <Footer />
+            <Footer setView={setView} />
           </>
+        ) : view === 'payment' ? (
+          <PaymentPage onBack={() => setView('home')} />
         ) : (
           user && <AdminPanel user={user} showNotification={showNotification} setConfirmConfig={setConfirmConfig} setView={setView} />
         )}

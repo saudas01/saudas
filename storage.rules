@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // Allow read access to everyone
+      allow read: if true;
+      
+      // Allow write access to authenticated users
+      // You can further restrict this to specific paths or admin emails
+      allow write: if request.auth != null;
+    }
+    
+    // More specific rules (Recommended)
+    /*
+    match /members/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /services/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /gallery/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    */
+  }
+}

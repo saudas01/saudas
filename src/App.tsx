@@ -59,7 +59,7 @@ import {
   startAfter,
   Timestamp 
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 
 enum OperationType {
   CREATE = 'create',
@@ -315,10 +315,15 @@ const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, use
 
   return (
     <nav className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-6 py-4",
-      isScrolled ? "bg-white/90 backdrop-blur-md shadow-sm" : "bg-transparent"
+      "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 py-4 flex justify-center",
+      isScrolled ? "top-2" : "top-0"
     )}>
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className={cn(
+        "w-full max-w-7xl flex items-center justify-between transition-all duration-500",
+        isScrolled 
+          ? "bg-white/90 backdrop-blur-md shadow-xl rounded-full px-8 py-3 border border-emerald-100/20" 
+          : "px-4 py-0"
+      )}>
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
           <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
             <Heart size={24} fill="currentColor" />
@@ -790,14 +795,14 @@ const Services = () => {
   const nextImage = (serviceId: string, imagesCount: number) => {
     setActiveImageIndices(prev => ({
       ...prev,
-      [serviceId]: (prev[serviceId] + 1) % imagesCount
+      [serviceId]: ((prev[serviceId] || 0) + 1) % imagesCount
     }));
   };
 
   const prevImage = (serviceId: string, imagesCount: number) => {
     setActiveImageIndices(prev => ({
       ...prev,
-      [serviceId]: (prev[serviceId] - 1 + imagesCount) % imagesCount
+      [serviceId]: ((prev[serviceId] || 0) - 1 + imagesCount) % imagesCount
     }));
   };
 
@@ -1935,50 +1940,106 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'member' | 'service' | 'gallery') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
     if (!storage) {
+      console.error("Firebase Storage is not initialized");
       showNotification("Firebase Storage কনফিগার করা নেই। অনুগ্রহ করে সেটিংস চেক করুন।", 'error');
+      return;
+    }
+
+    if (!auth.currentUser) {
+      showNotification("লগইন করা নেই। অনুগ্রহ করে আবার লগইন করুন।", 'error');
       return;
     }
 
     setUploading(true);
     try {
       const path = type === 'member' ? 'members' : type === 'service' ? 'services' : 'gallery';
-      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const storageRef = ref(storage, `${path}/${fileName}`);
-      
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      
-      if (type === 'gallery') {
-        await addDoc(collection(db, 'gallery'), {
-          url,
-          createdAt: Date.now()
-        });
-        showNotification("গ্যালারিতে ছবি যোগ করা হয়েছে।", 'success');
-      } else if (editingItem) {
-        if (editType === 'service') {
-          const currentImages = editingItem.images || [];
-          setEditingItem({ ...editingItem, images: [...currentImages, url] });
-        } else {
-          setEditingItem({ ...editingItem, image: url });
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        if (file.size === 0) {
+          showNotification(`ফাইল "${file.name}" খালি।`, 'error');
+          continue;
         }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          showNotification(`ফাইল "${file.name}" অনেক বড় (সর্বোচ্চ ৫MB)।`, 'error');
+          continue;
+        }
+
+        const fileName = `${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const storageRef = ref(storage, `${path}/${fileName}`);
+        
+        console.log(`Uploading ${file.name} to bucket: ${storage.app.options.storageBucket} at path: ${path}/${fileName}`);
+        
+        const uploadTask = uploadBytesResumable(storageRef, file);
+        
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              console.log(`Upload is ${progress}% done`);
+            }, 
+            (error) => {
+              console.error("Upload error:", error);
+              reject(error);
+            }, 
+            () => {
+              resolve();
+            }
+          );
+        });
+
+        const url = await getDownloadURL(storageRef);
+        uploadedUrls.push(url);
+        console.log(`Uploaded ${file.name} successfully: ${url}`);
+      }
+      
+      if (uploadedUrls.length === 0) {
+        setUploading(false);
+        return;
+      }
+
+      if (type === 'gallery') {
+        for (const url of uploadedUrls) {
+          await addDoc(collection(db, 'gallery'), {
+            url,
+            createdAt: Date.now()
+          });
+        }
+        showNotification(`${uploadedUrls.length}টি ছবি গ্যালারিতে যোগ করা হয়েছে।`, 'success');
+      } else {
+        setEditingItem((prev: any) => {
+          if (!prev) return null;
+          if (type === 'service') {
+            const currentImages = prev.images || [];
+            return { ...prev, images: [...currentImages, ...uploadedUrls] };
+          } else {
+            return { ...prev, image: uploadedUrls[0] };
+          }
+        });
         showNotification("ছবি আপলোড সম্পন্ন হয়েছে।", 'success');
       }
     } catch (error: any) {
       console.error("Error uploading image:", error);
       let msg = "ছবি আপলোড করতে সমস্যা হয়েছে।";
       if (error.code === 'storage/unauthorized') {
-        msg = "ছবি আপলোড করার অনুমতি নেই (Storage Rules)।";
+        msg = "ছবি আপলোড করার অনুমতি নেই (Storage Rules চেক করুন)।";
       } else if (error.code === 'storage/canceled') {
         msg = "আপলোড বাতিল করা হয়েছে।";
+      } else if (error.message) {
+        msg = `ত্রুটি: ${error.message}`;
       }
       showNotification(msg, 'error');
     } finally {
       setUploading(false);
-      // Reset input
+      // Reset input value to allow re-uploading same file if needed
       e.target.value = '';
     }
   };
@@ -2507,13 +2568,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                 type="file" 
                 accept="image/*" 
                 multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  files.forEach(file => {
-                    const fakeEvent = { target: { files: [file] } } as any;
-                    handleImageUpload(fakeEvent, 'gallery');
-                  });
-                }}
+                onChange={(e) => handleImageUpload(e, 'gallery')}
                 className="hidden"
               />
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -2819,7 +2874,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                           <label className="aspect-video rounded-lg border-2 border-dashed border-emerald-800 flex flex-col items-center justify-center text-emerald-500 hover:border-emerald-500 hover:text-emerald-400 transition-all cursor-pointer">
                             <Plus size={20} />
                             <span className="text-[10px] font-bold">ছবি যোগ করুন</span>
-                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'service')} className="hidden" />
+                            <input type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'service')} className="hidden" />
                           </label>
                         </div>
                       </div>

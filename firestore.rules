@@ -98,6 +98,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /donations/{donationId} {
+      // Anyone can submit a donation info
+      allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'amount', 'lastFour', 'status', 'createdAt']) &&
+                    request.resource.data.status == 'pending';
+      // Only admins can read/update/delete
+      allow read, update, delete: if isAdmin();
+    }
+
     function isAdmin() {
       return isAuthenticated() && 
              (request.auth.token.email == "md.munnahossain885@gmail.com" ||

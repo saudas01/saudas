@@ -36,6 +36,7 @@ import {
   LogOut,
   User as UserIcon,
   UserCircle,
+  Copy,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -1734,11 +1735,12 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
   setView: (v: 'home' | 'admin') => void
 }) => {
   const [adminData, setAdminData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery' | 'active_members'>('approved');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery' | 'active_members' | 'donations'>('approved');
   const [members, setMembers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [gallery, setGallery] = useState<any[]>([]);
+  const [donations, setDonations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
@@ -1856,13 +1858,22 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
       handleFirestoreError(error, OperationType.GET, 'active_members');
     });
 
+    // Fetch donations
+    const qDonations = query(collection(db, 'donations'), orderBy('createdAt', 'desc'));
+    const unsubDonations = onSnapshot(qDonations, (snapshot) => {
+      setDonations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'donations');
+    });
+
     return () => {
       unsubMembers();
       unsubServices();
       unsubGallery();
       unsubActiveMembers();
+      unsubDonations();
     };
-  }, [isAdmin]);
+  }, [isAdmin, db, adminData]);
 
   const handleLogout = () => signOut(auth);
 
@@ -2155,7 +2166,8 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
               { id: 'approved', label: `সদস্য (${approvedMembers.length})` },
               { id: 'services', label: 'সেবা' },
               { id: 'gallery', label: 'গ্যালারি' },
-              { id: 'active_members', label: 'সক্রিয় সদস্য' }
+              { id: 'active_members', label: 'সক্রিয় সদস্য' },
+              { id: 'donations', label: 'অনুদান' }
             ].map((tab) => (
               <button 
                 key={tab.id}
@@ -2599,6 +2611,119 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
               </div>
             </div>
           )}
+
+          {activeTab === 'donations' && (
+            <div className="p-4 md:p-0">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-emerald-800 bg-emerald-900/50">
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">দাতা</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">টাকার পরিমাণ</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">লেনদেনের তথ্য</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">তারিখ</th>
+                      <th className="px-6 py-4 text-sm font-bold uppercase tracking-wider">অ্যাকশন</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-800">
+                    {donations.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-emerald-500 italic">কোনো অনুদানের তথ্য পাওয়া যায়নি।</td>
+                      </tr>
+                    ) : donations.map((donation) => (
+                      <tr key={donation.id} className="hover:bg-emerald-800/20 transition-colors">
+                        <td className="px-6 py-6">
+                          <div className="font-bold">{donation.name}</div>
+                          <div className="text-xs text-emerald-500">{donation.phone}</div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <span className="text-emerald-400 font-bold">৳ {toBengaliNumber(donation.amount)}</span>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="text-sm">শেষ ৪ ডিজিট: <span className="font-mono text-emerald-400">{donation.lastFour}</span></div>
+                          <div className="text-[10px] text-emerald-500 uppercase mt-1">{donation.status === 'pending' ? 'যাচাই করা হয়নি' : 'যাচাইকৃত'}</div>
+                        </td>
+                        <td className="px-6 py-6 text-sm text-emerald-400">
+                          {new Date(donation.createdAt).toLocaleDateString('bn-BD')}
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex items-center gap-2">
+                            {donation.status === 'pending' && (
+                              <button 
+                                onClick={async () => {
+                                  try {
+                                    await updateDoc(doc(db, 'donations', donation.id), { status: 'verified' });
+                                    showNotification("অনুদান যাচাই করা হয়েছে।", 'success');
+                                  } catch (error) {
+                                    handleFirestoreError(error, OperationType.UPDATE, 'donations');
+                                  }
+                                }}
+                                className="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-all"
+                                title="যাচাই করুন"
+                              >
+                                <CheckCircle2 size={18} />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => deleteItem('donations', donation.id)}
+                              className="p-2 bg-red-600 hover:bg-red-500 rounded-lg transition-all"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-4 p-4">
+                {donations.length === 0 ? (
+                  <div className="py-12 text-center text-emerald-500 italic">কোনো অনুদানের তথ্য পাওয়া যায়নি।</div>
+                ) : donations.map((donation) => (
+                  <div key={donation.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="font-bold text-lg">{donation.name}</div>
+                        <div className="text-sm text-emerald-500">{donation.phone}</div>
+                      </div>
+                      <div className="text-emerald-400 font-bold text-xl">৳ {toBengaliNumber(donation.amount)}</div>
+                    </div>
+                    <div className="bg-emerald-950/50 rounded-xl p-3 mb-4 border border-emerald-800/50">
+                      <div className="text-sm text-emerald-300">লেনদেনের শেষ ৪ ডিজিট: <span className="font-mono font-bold">{donation.lastFour}</span></div>
+                      <div className="text-xs text-emerald-500 mt-1">তারিখ: {new Date(donation.createdAt).toLocaleDateString('bn-BD')}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      {donation.status === 'pending' && (
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await updateDoc(doc(db, 'donations', donation.id), { status: 'verified' });
+                              showNotification("অনুদান যাচাই করা হয়েছে।", 'success');
+                            } catch (error) {
+                              handleFirestoreError(error, OperationType.UPDATE, 'donations');
+                            }
+                          }}
+                          className="flex-grow flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm"
+                        >
+                          <CheckCircle2 size={16} /> যাচাই করুন
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => deleteItem('donations', donation.id)}
+                        className="p-2.5 bg-red-600 text-white rounded-xl"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2955,68 +3080,202 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-const PaymentPage = ({ onBack }: { onBack: () => void }) => {
+const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNotification: (m: string, t: 'success' | 'error') => void }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    amount: '',
+    lastFour: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.phone || !formData.amount || !formData.lastFour) {
+      showNotification("অনুগ্রহ করে সব তথ্য প্রদান করুন।", 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'donations'), {
+        ...formData,
+        status: 'pending',
+        createdAt: Date.now()
+      });
+      showNotification("আপনার তথ্য সফলভাবে জমা হয়েছে। যাচাই করার পর আমরা ডিজিটাল ভাউচার পাঠিয়ে দেব।", 'success');
+      setFormData({ name: '', phone: '', amount: '', lastFour: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'donations');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 font-sans">
+    <div className="min-h-screen bg-emerald-50/30 flex flex-col items-center py-12 px-6 font-sans">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-2xl w-full text-center"
+        className="max-w-4xl w-full"
       >
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-emerald-500 mb-4">আপনার সহযোগিতা প্রয়োজন</h1>
-          <p className="text-xl text-gray-800 mb-6">স্বাস্থ্যসেবা, শিক্ষা ও দারিদ্র্য বিমোচন</p>
-          <div className="max-w-xl mx-auto">
-            <p className="text-gray-600 leading-relaxed">
-              সাউদাস (সামাজিক উন্নয়ন দাতব্য সংস্থা) একটি অলাভজনক প্রতিষ্ঠান যা সমাজের অবহেলিত ও সুবিধাবঞ্চিত মানুষের কল্যাণে কাজ করে। আমাদের মূল লক্ষ্য হলো মানসম্মত স্বাস্থ্যসেবা নিশ্চিত করা, শিক্ষার আলো ছড়িয়ে দেওয়া এবং টেকসই উন্নয়ন প্রকল্পের মাধ্যমে দারিদ্র্য বিমোচন করা। আপনার সামান্য দান একজন মানুষের জীবন বদলে দিতে পারে।
-            </p>
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <Heart size={16} fill="currentColor" /> ডিজিটাল অ্যাসিস্ট্যান্ট
+          </div>
+          <h1 className="text-3xl md:text-5xl font-bold text-emerald-950 mb-4">সাউদাস-এ অনুদান প্রদান</h1>
+          <p className="text-lg text-emerald-800/70 max-w-2xl mx-auto">
+            আপনার সামান্য দান একজন মানুষের জীবন বদলে দিতে পারে। নিচে দেওয়া নম্বরে পেমেন্ট করে আপনার তথ্য প্রদান করুন।
+          </p>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-8 items-start">
+          {/* Payment Details */}
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-emerald-100">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
+                  <UserIcon size={32} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-emerald-950">মোঃ আবু সাইদ</h3>
+                  <p className="text-emerald-600 font-medium">কোষাধ্যক্ষ, সাউদাস</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#e2136e] rounded-xl flex items-center justify-center text-white font-bold">ব</div>
+                    <div>
+                      <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">বিকাশ (পার্সোনাল)</p>
+                      <p className="text-lg font-bold text-emerald-950">01797315660</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText('01797315660');
+                      showNotification("নম্বর কপি করা হয়েছে", 'success');
+                    }}
+                    className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#f7941d] rounded-xl flex items-center justify-center text-white font-bold">ন</div>
+                    <div>
+                      <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">নগদ (পার্সোনাল)</p>
+                      <p className="text-lg font-bold text-emerald-950">01797315660</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText('01797315660');
+                      showNotification("নম্বর কপি করা হয়েছে", 'success');
+                    }}
+                    className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#8c3494] rounded-xl flex items-center justify-center text-white font-bold">র</div>
+                    <div>
+                      <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">রকেট</p>
+                      <p className="text-lg font-bold text-emerald-950">017973156603</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText('017973156603');
+                      showNotification("নম্বর কপি করা হয়েছে", 'success');
+                    }}
+                    className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-emerald-900 text-white p-8 rounded-3xl shadow-lg shadow-emerald-900/20">
+              <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <ShieldCheck size={20} className="text-emerald-400" /> ডিজিটাল ভাউচার
+              </h4>
+              <p className="text-emerald-100/80 text-sm leading-relaxed">
+                পেমেন্ট সম্পন্ন করার পর পাশের ফর্মে আপনার তথ্য প্রদান করুন। আমাদের কোষাধ্যক্ষ তথ্যটি যাচাই করার পর আপনার মোবাইল নম্বরে একটি ডিজিটাল ভাউচার পাঠিয়ে দেবেন।
+              </p>
+            </div>
+          </div>
+
+          {/* Submission Form */}
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-emerald-100">
+            <h3 className="text-xl font-bold text-emerald-950 mb-6">পেমেন্ট তথ্য প্রদান করুন</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-emerald-900 mb-1">আপনার নাম</label>
+                <input 
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                  placeholder="পুরো নাম লিখুন"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-emerald-900 mb-1">মোবাইল নম্বর</label>
+                <input 
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                  placeholder="আপনার সচল মোবাইল নম্বর"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-emerald-900 mb-1">টাকার পরিমাণ</label>
+                <input 
+                  type="text"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                  placeholder="কত টাকা পাঠিয়েছেন?"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-emerald-900 mb-1">লেনদেনের শেষ ৪টি ডিজিট</label>
+                <input 
+                  type="text"
+                  maxLength={4}
+                  value={formData.lastFour}
+                  onChange={(e) => setFormData({...formData, lastFour: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                  placeholder="Transaction ID-এর শেষ ৪টি সংখ্যা"
+                />
+              </div>
+              <button 
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? "জমা হচ্ছে..." : "তথ্য জমা দিন"}
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Payment Box */}
-        <div className="bg-gray-50 rounded-[2rem] p-8 md:p-12 border border-gray-100 mb-12">
-          <div className="space-y-8">
-            {/* bKash */}
-            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
-              <div className="text-left">
-                <h3 className="text-xl font-bold text-gray-800">বিকাশ (পার্সোনাল)</h3>
-                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
-              </div>
-              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
-            </div>
-
-            {/* Nagad */}
-            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
-              <div className="text-left">
-                <h3 className="text-xl font-bold text-gray-800">নগদ (পার্সোনাল)</h3>
-                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
-              </div>
-              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
-            </div>
-
-            {/* Rocket */}
-            <div className="flex items-center justify-between pb-6 border-b border-gray-200 last:border-0 last:pb-0">
-              <div className="text-left">
-                <h3 className="text-xl font-bold text-gray-800">রকেট (পার্সোনাল)</h3>
-                <p className="text-lg text-gray-500 font-mono">০১৭XXXXXXXX</p>
-              </div>
-              <span className="text-emerald-500 font-bold text-lg">সেন্ড মানি করুন</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Thank You Message */}
-        <div className="text-center">
-          <p className="text-2xl font-bold text-emerald-700 mb-8">ধন্যবাদ</p>
-          <button 
-            onClick={onBack}
-            className="text-gray-500 hover:text-emerald-600 transition-colors flex items-center gap-2 mx-auto font-medium"
-          >
-            <ChevronLeft size={20} />
-            হোম পেজে ফিরে যান
-          </button>
-        </div>
+        <button 
+          onClick={onBack}
+          className="mt-12 text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-2 mx-auto font-bold"
+        >
+          <ChevronLeft size={20} /> হোম পেজে ফিরে যান
+        </button>
       </motion.div>
     </div>
   );
@@ -3078,7 +3337,7 @@ export default function App() {
             <Footer setView={setView} />
           </>
         ) : view === 'payment' ? (
-          <PaymentPage onBack={() => setView('home')} />
+          <PaymentPage onBack={() => setView('home')} showNotification={showNotification} />
         ) : (
           user && <AdminPanel user={user} showNotification={showNotification} setConfirmConfig={setConfirmConfig} setView={setView} />
         )}

@@ -120,6 +120,33 @@
         }
       },
       "required": ["uid", "email", "role"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "A donation record submitted by a user.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string"
+        },
+        "lastFour": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "verified"]
+        },
+        "createdAt": {
+          "type": "integer"
+        }
+      },
+      "required": ["name", "phone", "amount", "lastFour", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -138,6 +165,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "Collection of users and their roles."
+    },
+    "/donations/{donationId}": {
+      "schema": "Donation",
+      "description": "Collection of donation submissions."
     }
   }
 }

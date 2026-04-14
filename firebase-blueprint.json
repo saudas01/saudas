@@ -147,6 +147,128 @@
         }
       },
       "required": ["name", "phone", "amount", "lastFour", "status", "createdAt"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "An official notice from the organization.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "integer" },
+        "authorName": { "type": "string" }
+      },
+      "required": ["title", "content", "createdAt"]
+    },
+    "BloodPost": {
+      "title": "BloodPost",
+      "description": "A post requesting blood donation.",
+      "type": "object",
+      "properties": {
+        "bloodGroup": { "type": "string" },
+        "location": { "type": "string" },
+        "phone": { "type": "string" },
+        "description": { "type": "string" },
+        "urgency": { "type": "string", "enum": ["normal", "urgent", "emergency"] },
+        "createdAt": { "type": "integer" },
+        "authorName": { "type": "string" },
+        "authorId": { "type": "string" }
+      },
+      "required": ["bloodGroup", "location", "phone", "urgency", "createdAt"]
+    },
+    "BloodComment": {
+      "title": "BloodComment",
+      "description": "A comment on a blood donation post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "text": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["postId", "text", "authorName", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message in the community chat.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["text", "authorName", "authorId", "createdAt"]
+    },
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "General site configuration and content.",
+      "type": "object",
+      "properties": {
+        "hero": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "bgImage": { "type": "string" },
+            "stats": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": { "type": "string" },
+                  "value": { "type": "string" },
+                  "icon": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "about": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "storyTitle": { "type": "string" },
+            "storyContent": { "type": "string" }
+          }
+        },
+        "contact": {
+          "type": "object",
+          "properties": {
+            "phone": { "type": "string" },
+            "email": { "type": "string" },
+            "address": { "type": "string" }
+          }
+        },
+        "payment": {
+          "type": "object",
+          "properties": {
+            "treasurerName": { "type": "string" },
+            "treasurerRole": { "type": "string" },
+            "bkash": { "type": "string" },
+            "nagad": { "type": "string" },
+            "rocket": { "type": "string" }
+          }
+        }
+      }
+    },
+    "Event": {
+      "title": "Event",
+      "description": "An event organized by the charity.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["title", "date", "time", "location", "description", "createdAt"]
     }
   },
   "firestore": {
@@ -169,6 +291,30 @@
     "/donations/{donationId}": {
       "schema": "Donation",
       "description": "Collection of donation submissions."
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "Collection of official notices."
+    },
+    "/blood_posts/{postId}": {
+      "schema": "BloodPost",
+      "description": "Collection of blood donation requests."
+    },
+    "/blood_comments/{commentId}": {
+      "schema": "BloodComment",
+      "description": "Collection of comments on blood posts."
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Collection of community chat messages."
+    },
+    "/site_config/{configId}": {
+      "schema": "SiteConfig",
+      "description": "Collection for site content and configuration."
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Collection of charity events."
     }
   }
 }

@@ -12,8 +12,10 @@ import {
   Menu,
   X,
   ArrowRight,
+  Camera,
   CheckCircle2,
   Calendar,
+  Clock,
   Droplets,
   Home,
   Activity,
@@ -28,6 +30,8 @@ import {
   Check,
   Edit3,
   Plus,
+  PlusCircle,
+  UserPlus,
   Image as ImageIcon,
   LayoutDashboard,
   Settings,
@@ -38,7 +42,10 @@ import {
   UserCircle,
   Copy,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MessageCircle,
+  Bell,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -57,6 +64,8 @@ import {
   deleteDoc,
   getDocs,
   getDoc,
+  getDocFromServer,
+  serverTimestamp,
   startAfter,
   Timestamp 
 } from 'firebase/firestore';
@@ -293,159 +302,277 @@ const Notification = ({ message, type, onClose }: { message: string, type: 'succ
   );
 };
 
-const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, user: User | null, setView: (v: 'home' | 'admin' | 'payment') => void }) => {
+interface SiteConfig {
+  hero: {
+    title: string;
+    subtitle: string;
+    bgImage: string;
+    stats: { label: string; value: string; icon: string }[];
+  };
+  about: {
+    title: string;
+    subtitle: string;
+    storyTitle: string;
+    storyContent: string;
+  };
+  contact: {
+    phone: string;
+    email: string;
+    address: string;
+  };
+  payment: {
+    treasurerName: string;
+    treasurerRole: string;
+    bkash: string;
+    nagad: string;
+    rocket: string;
+  };
+}
+
+const DEFAULT_CONFIG: SiteConfig = {
+  hero: {
+    title: "মানবতার সেবায় আমরা পাশে আছি",
+    subtitle: "সামাজিক উন্নয়ন দাতব্য সংস্থা (সাউদাস) দারিদ্র্য বিমোচন, চিকিৎসা সহায়তা এবং টেকসই সামাজিক উন্নয়নে নিবেদিত।",
+    bgImage: "https://images.unsplash.com/photo-1542810634-71277d95dcbb?q=80&w=2070&auto=format&fit=crop",
+    stats: [
+      { label: "রক্তদাতা", value: "১.২k+", icon: "Droplets" }
+    ]
+  },
+  about: {
+    title: "আমাদের সম্পর্কে",
+    subtitle: "মানবতার সেবায় আমরা - সাউদাস (SAUDAS)",
+    storyTitle: "আমাদের গল্প",
+    storyContent: "২০২৪ সাল থেকে আমরা একদল উদ্যমী মানুষ একত্রিত হয়েছি সমাজের পিছিয়ে পড়া মানুষদের জন্য কিছু করার তাগিদে। সাউদাস শুধু একটি নাম নয়, এটি একটি আস্থার প্রতীক।"
+  },
+  contact: {
+    phone: "+৮৮ ০১৯২৪-৪৬৫৪৫৪",
+    email: "sdoo07072025@gmail.com",
+    address: "প্রধান কার্যালয়ঃ রাজগঞ্জ, মনিরামপুর, যশোর।"
+  },
+  payment: {
+    treasurerName: "মোঃ আবু সাইদ",
+    treasurerRole: "কোষাধ্যক্ষ, সাউদাস",
+    bkash: "01797315660",
+    nagad: "01797315660",
+    rocket: "017973156603"
+  }
+};
+
+const Navbar = ({ 
+  onLoginClick, 
+  onLogoutClick,
+  user, 
+  setView,
+  toggleTheme,
+  theme
+}: { 
+  onLoginClick: () => void, 
+  onLogoutClick: () => void,
+  user: User | null, 
+  setView: (v: any) => void,
+  toggleTheme: () => void,
+  theme: 'light' | 'dark'
+}) => {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const navLinks = [
-    { name: 'হোম', href: '#' },
-    { name: 'আমাদের সম্পর্কে', href: '#about' },
-    { name: 'সেবা সমূহ', href: '#services' },
-    { name: 'সদস্যগণ', href: '#members' },
-    { name: 'যুক্ত হোন', href: '#join' },
-    { name: 'যোগাযোগ', href: '#contact' },
+    { label: 'হোম', view: 'home' },
+    { label: 'সদস্য তালিকা', view: 'directory' },
+    { label: 'ইভেন্ট', view: 'events' },
+    { label: 'রক্তদান', view: 'blood' },
+    { label: 'চ্যাট', view: 'chat' },
   ];
 
   return (
     <nav className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 py-4 flex justify-center",
-      isScrolled ? "top-2" : "top-0"
+      "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 py-2 flex justify-center",
+      isScrolled ? "bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-lg" : "bg-transparent"
     )}>
-      <div className={cn(
-        "w-full max-w-7xl flex items-center justify-between transition-all duration-500",
-        isScrolled 
-          ? "bg-white/90 backdrop-blur-md shadow-xl rounded-full px-8 py-3 border border-emerald-100/20" 
-          : "px-4 py-0"
-      )}>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-          <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
+      <div className="w-full max-w-7xl flex items-center justify-between py-2">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('home'); setIsMobileMenuOpen(false); }}>
+          <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-emerald-600/20">
             <Heart size={24} fill="currentColor" />
           </div>
           <span className={cn(
             "font-bold text-xl tracking-tight",
-            isScrolled ? "text-emerald-950" : "text-white"
+            isScrolled ? "text-emerald-950 dark:text-white" : "text-white"
           )}>
             সাউদাস
           </span>
         </div>
 
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-8">
+        {/* Desktop Navigation */}
+        <div className="hidden lg:flex items-center gap-8">
           {navLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
+            <button
+              key={link.view}
+              onClick={() => setView(link.view)}
               className={cn(
-                "text-sm font-medium transition-colors hover:text-emerald-500",
-                isScrolled ? "text-emerald-900" : "text-white/90"
+                "text-sm font-bold transition-all hover:text-emerald-500",
+                isScrolled ? "text-emerald-900 dark:text-emerald-100" : "text-white/90"
               )}
             >
-              {link.name}
-            </a>
+              {link.label}
+            </button>
           ))}
-          <div className="flex items-center gap-4">
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3">
             {user ? (
-              <button
-                onClick={() => setView('admin')}
-                className={cn(
-                  "p-2 rounded-full transition-all hover:bg-emerald-500/10",
-                  isScrolled ? "text-emerald-900" : "text-white"
-                )}
-                title="এডমিন প্যানেল"
-              >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-emerald-500" />
-                ) : (
-                  <LayoutDashboard size={20} />
-                )}
-              </button>
-            ) : (
-              <button
-              onClick={() => setView('payment')}
-              className={cn(
-                "p-2 rounded-full transition-all hover:bg-emerald-500/10",
-                isScrolled ? "text-emerald-900" : "text-white"
-              )}
-              title="লগইন"
-            >
-              <LogIn size={20} />
-            </button>
-          )}
-          <button
-            onClick={() => setView('payment')}
-            className="bg-emerald-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
-          >
-            দান করুন
-          </button>
-        </div>
-      </div>
-
-        {/* Mobile Menu Toggle */}
-        <div className="flex items-center gap-4 md:hidden">
-          {user ? (
-            <button
-              onClick={() => setView('admin')}
-              className={cn("p-2", isScrolled ? "text-emerald-900" : "text-white")}
-            >
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-emerald-500/20" />
-              ) : (
-                <LayoutDashboard size={20} />
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={onLoginClick}
-              className={cn("p-2", isScrolled ? "text-emerald-900" : "text-white")}
-            >
-              <LogIn size={20} />
-            </button>
-          )}
-          <button
-            className={cn("p-2", isScrolled ? "text-emerald-900" : "text-white")}
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Nav */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="absolute top-full left-0 right-0 bg-white shadow-xl border-t border-emerald-50 md:hidden p-6 mx-4 mt-2 rounded-2xl"
-          >
-            <div className="flex flex-col gap-4">
-              {navLinks.map((link) => (
-                <a
-                  key={link.name}
-                  href={link.href}
-                  className="text-emerald-900 font-medium py-2 border-b border-emerald-50 last:border-0"
-                  onClick={() => setIsMenuOpen(false)}
+              <>
+                <button
+                  onClick={() => setView('profile')}
+                  className={cn(
+                    "p-2 rounded-full transition-all flex items-center gap-2",
+                    isScrolled ? "text-emerald-600 hover:bg-emerald-50" : "text-white/80 hover:bg-white/10"
+                  )}
+                  title="প্রোফাইল"
                 >
-                  {link.name}
-                </a>
+                  <UserIcon size={20} />
+                  <span className="hidden lg:inline text-sm font-bold">প্রোফাইল</span>
+                </button>
+                <button
+                  onClick={() => setView('admin')}
+                  className={cn(
+                    "px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2",
+                    isScrolled 
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700" 
+                      : "bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+                  )}
+                >
+                  <LayoutDashboard size={18} />
+                  ড্যাশবোর্ড
+                </button>
+                <button
+                  onClick={onLogoutClick}
+                  className={cn(
+                    "p-2 rounded-full transition-all",
+                    isScrolled ? "text-red-600 hover:bg-red-50" : "text-white/80 hover:bg-white/10"
+                  )}
+                  title="লগআউট"
+                >
+                  <LogOut size={20} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('join');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    else setView('home');
+                  }}
+                  className={cn(
+                    "text-sm font-bold transition-all",
+                    isScrolled ? "text-emerald-900 dark:text-emerald-100 hover:text-emerald-600" : "text-white/90 hover:text-white"
+                  )}
+                >
+                  নিবন্ধন
+                </button>
+                <button
+                  onClick={onLoginClick}
+                  className={cn(
+                    "px-6 py-2 rounded-full text-sm font-bold transition-all",
+                    isScrolled 
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700" 
+                      : "bg-white text-emerald-600 hover:bg-emerald-50"
+                  )}
+                >
+                  লগইন
+                </button>
+              </>
+            )}
+          </div>
+
+          <button 
+            onClick={toggleTheme}
+            className={cn(
+              "p-2 rounded-full transition-all hover:bg-emerald-50 dark:hover:bg-slate-800",
+              isScrolled ? "text-emerald-900 dark:text-white" : "text-white"
+            )}
+          >
+            {theme === 'light' ? <Settings size={20} /> : <Activity size={20} />}
+          </button>
+
+          {/* Mobile Menu Toggle */}
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className={cn(
+              "lg:hidden p-2 rounded-full transition-all",
+              isScrolled ? "text-emerald-900 dark:text-white" : "text-white"
+            )}
+          >
+            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-full left-0 right-0 bg-white dark:bg-slate-900 shadow-2xl border-t border-emerald-100 dark:border-slate-800 lg:hidden"
+          >
+            <div className="flex flex-col p-6 gap-4">
+              {navLinks.map((link) => (
+                <button
+                  key={link.view}
+                  onClick={() => { setView(link.view); setIsMobileMenuOpen(false); }}
+                  className="text-left py-3 text-emerald-950 dark:text-white font-bold border-b border-emerald-50 dark:border-slate-800 last:border-0"
+                >
+                  {link.label}
+                </button>
               ))}
-              <a
-                href="#join"
-                className="bg-emerald-600 text-white px-5 py-3 rounded-xl text-center font-semibold mt-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                সদস্য হিসেবে যুক্ত হোন
-              </a>
+              <div className="flex flex-col gap-3 pt-4">
+                {user ? (
+                  <>
+                    <button
+                      onClick={() => { setView('admin'); setIsMobileMenuOpen(false); }}
+                      className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+                    >
+                      <LayoutDashboard size={20} />
+                      ড্যাশবোর্ড
+                    </button>
+                    <button
+                      onClick={() => { onLogoutClick(); setIsMobileMenuOpen(false); }}
+                      className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center justify-center gap-2"
+                    >
+                      <LogOut size={20} />
+                      লগআউট
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { 
+                        setIsMobileMenuOpen(false);
+                        const el = document.getElementById('join');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="w-full py-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold"
+                    >
+                      নিবন্ধন করুন
+                    </button>
+                    <button
+                      onClick={() => { onLoginClick(); setIsMobileMenuOpen(false); }}
+                      className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold"
+                    >
+                      লগইন করুন
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -453,7 +580,478 @@ const Navbar = ({ onLoginClick, user, setView }: { onLoginClick: () => void, use
     </nav>
   );
 };
-const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void }) => {
+const NoticeSection = ({ isAdmin }: { isAdmin: boolean }) => {
+  const [notices, setNotices] = useState<any[]>([]);
+  const [newNotice, setNewNotice] = useState({ title: '', content: '' });
+  const [isAdding, setIsAdding] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'notices'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setNotices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
+
+  const handleAddNotice = async () => {
+    if (!newNotice.title || !newNotice.content) return;
+    try {
+      await addDoc(collection(db, 'notices'), {
+        ...newNotice,
+        createdAt: Date.now(),
+        authorName: 'Admin'
+      });
+      setNewNotice({ title: '', content: '' });
+      setIsAdding(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'notices');
+    }
+  };
+
+  const handleDeleteNotice = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'notices', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'notices');
+    }
+  };
+
+  return (
+    <div className="pt-24 pb-32 px-4 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <h2 className="text-3xl font-bold text-emerald-950">নোটিশ বোর্ড</h2>
+        {isAdmin && (
+          <button 
+            onClick={() => setIsAdding(!isAdding)}
+            className="bg-emerald-600 text-white p-3 rounded-full shadow-lg"
+          >
+            {isAdding ? <X size={24} /> : <Plus size={24} />}
+          </button>
+        )}
+      </div>
+
+      {isAdding && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-6 rounded-3xl shadow-xl border border-emerald-100 mb-8"
+        >
+          <input 
+            type="text" 
+            placeholder="নোটিশের শিরোনাম"
+            className="w-full p-4 rounded-2xl border border-emerald-100 mb-4 focus:ring-2 focus:ring-emerald-500 outline-none"
+            value={newNotice.title}
+            onChange={(e) => setNewNotice({ ...newNotice, title: e.target.value })}
+          />
+          <textarea 
+            placeholder="বিস্তারিত লিখুন..."
+            className="w-full p-4 rounded-2xl border border-emerald-100 mb-4 h-32 focus:ring-2 focus:ring-emerald-500 outline-none"
+            value={newNotice.content}
+            onChange={(e) => setNewNotice({ ...newNotice, content: e.target.value })}
+          />
+          <button 
+            onClick={handleAddNotice}
+            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold"
+          >
+            নোটিশ পাবলিশ করুন
+          </button>
+        </motion.div>
+      )}
+
+      <div className="space-y-6">
+        {notices.map((notice) => (
+          <motion.div 
+            key={notice.id}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white p-6 rounded-3xl shadow-md border border-emerald-50 relative group"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                <Bell size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-emerald-950">{notice.title}</h3>
+                <p className="text-xs text-emerald-900/40">
+                  {new Date(notice.createdAt).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+            <p className="text-emerald-900/70 leading-relaxed whitespace-pre-wrap">
+              {notice.content}
+            </p>
+            {isAdmin && (
+              <button 
+                onClick={() => handleDeleteNotice(notice.id)}
+                className="absolute top-4 right-4 p-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const BloodSection = ({ user, isAdmin }: { user: any, isAdmin: boolean }) => {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [comments, setComments] = useState<{[key: string]: any[]}>({});
+  const [newPost, setNewPost] = useState({ bloodGroup: '', location: '', phone: '', urgency: 'normal', description: '' });
+  const [isPosting, setIsPosting] = useState(false);
+  const [commentTexts, setCommentTexts] = useState<{[key: string]: string}>({});
+
+  useEffect(() => {
+    const q = query(collection(db, 'blood_posts'), orderBy('createdAt', 'desc'));
+    const unsubPosts = onSnapshot(q, (snapshot) => {
+      setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubComments = onSnapshot(collection(db, 'blood_comments'), (snapshot) => {
+      const grouped: {[key: string]: any[]} = {};
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (!grouped[data.postId]) grouped[data.postId] = [];
+        grouped[data.postId].push({ id: doc.id, ...data });
+      });
+      // Sort comments by date
+      Object.keys(grouped).forEach(key => {
+        grouped[key].sort((a, b) => a.createdAt - b.createdAt);
+      });
+      setComments(grouped);
+    });
+
+    return () => {
+      unsubPosts();
+      unsubComments();
+    };
+  }, []);
+
+  const handleCreatePost = async () => {
+    if (!newPost.bloodGroup || !newPost.location || !newPost.phone) return;
+    try {
+      await addDoc(collection(db, 'blood_posts'), {
+        ...newPost,
+        createdAt: Date.now(),
+        authorName: user?.displayName || 'Admin',
+        authorId: user?.uid
+      });
+      setNewPost({ bloodGroup: '', location: '', phone: '', urgency: 'normal', description: '' });
+      setIsPosting(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'blood_posts');
+    }
+  };
+
+  const handleAddComment = async (postId: string) => {
+    const text = commentTexts[postId];
+    if (!text || !user) return;
+    try {
+      await addDoc(collection(db, 'blood_comments'), {
+        postId,
+        text,
+        authorName: user.displayName || 'Anonymous',
+        authorId: user.uid,
+        createdAt: Date.now()
+      });
+      setCommentTexts({ ...commentTexts, [postId]: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'blood_comments');
+    }
+  };
+
+  return (
+    <div className="pt-24 pb-32 px-4 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <h2 className="text-3xl font-bold text-emerald-950">রক্তদান পোস্ট</h2>
+        {isAdmin && (
+          <button 
+            onClick={() => setIsPosting(!isPosting)}
+            className="bg-red-600 text-white p-3 rounded-full shadow-lg"
+          >
+            {isPosting ? <X size={24} /> : <Plus size={24} />}
+          </button>
+        )}
+      </div>
+
+      {isPosting && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-6 rounded-3xl shadow-xl border border-red-100 mb-8"
+        >
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <select 
+              className="p-4 rounded-2xl border border-red-50 focus:ring-2 focus:ring-red-500 outline-none bg-white"
+              value={newPost.bloodGroup}
+              onChange={(e) => setNewPost({ ...newPost, bloodGroup: e.target.value })}
+            >
+              <option value="">রক্তের গ্রুপ</option>
+              {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
+                <option key={bg} value={bg}>{bg}</option>
+              ))}
+            </select>
+            <select 
+              className="p-4 rounded-2xl border border-red-50 focus:ring-2 focus:ring-red-500 outline-none bg-white"
+              value={newPost.urgency}
+              onChange={(e) => setNewPost({ ...newPost, urgency: e.target.value })}
+            >
+              <option value="normal">সাধারণ</option>
+              <option value="urgent">জরুরী</option>
+              <option value="emergency">অত্যন্ত জরুরী</option>
+            </select>
+          </div>
+          <input 
+            type="text" 
+            placeholder="লোকেশন"
+            className="w-full p-4 rounded-2xl border border-red-50 mb-4 focus:ring-2 focus:ring-red-500 outline-none"
+            value={newPost.location}
+            onChange={(e) => setNewPost({ ...newPost, location: e.target.value })}
+          />
+          <input 
+            type="text" 
+            placeholder="মোবাইল নম্বর"
+            className="w-full p-4 rounded-2xl border border-red-50 mb-4 focus:ring-2 focus:ring-red-500 outline-none"
+            value={newPost.phone}
+            onChange={(e) => setNewPost({ ...newPost, phone: e.target.value })}
+          />
+          <textarea 
+            placeholder="বিস্তারিত..."
+            className="w-full p-4 rounded-2xl border border-red-50 mb-4 h-24 focus:ring-2 focus:ring-red-500 outline-none"
+            value={newPost.description}
+            onChange={(e) => setNewPost({ ...newPost, description: e.target.value })}
+          />
+          <button 
+            onClick={handleCreatePost}
+            className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold"
+          >
+            পোস্ট করুন
+          </button>
+        </motion.div>
+      )}
+
+      <div className="space-y-8">
+        {posts.map((post) => (
+          <div key={post.id} className="bg-white rounded-3xl shadow-lg border border-red-50 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-xl font-bold">
+                    {post.bloodGroup}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-emerald-950">রক্ত প্রয়োজন</h3>
+                    <p className="text-xs text-emerald-900/40">{new Date(post.createdAt).toLocaleString('bn-BD')}</p>
+                  </div>
+                </div>
+                <span className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-bold",
+                  post.urgency === 'emergency' ? "bg-red-600 text-white" : 
+                  post.urgency === 'urgent' ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600"
+                )}>
+                  {post.urgency === 'emergency' ? 'অত্যন্ত জরুরী' : post.urgency === 'urgent' ? 'জরুরী' : 'সাধারণ'}
+                </span>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-3 text-emerald-900/70">
+                  <MapPin size={18} className="text-red-400" />
+                  <span>{post.location}</span>
+                </div>
+                <div className="flex items-center gap-3 text-emerald-900/70">
+                  <Phone size={18} className="text-red-400" />
+                  <span>{post.phone}</span>
+                </div>
+                {post.description && (
+                  <p className="text-emerald-900/60 bg-emerald-50/30 p-4 rounded-2xl italic">
+                    "{post.description}"
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-emerald-50 pt-6">
+                <h4 className="font-bold text-emerald-950 mb-4 flex items-center gap-2">
+                  <MessageCircle size={18} /> মতামত ({comments[post.id]?.length || 0})
+                </h4>
+                <div className="space-y-4 mb-6 max-h-60 overflow-y-auto pr-2">
+                  {comments[post.id]?.map((comment) => (
+                    <div key={comment.id} className="bg-emerald-50/50 p-4 rounded-2xl">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold text-sm text-emerald-900">{comment.authorName}</span>
+                        <span className="text-[10px] text-emerald-900/40">{new Date(comment.createdAt).toLocaleTimeString('bn-BD')}</span>
+                      </div>
+                      <p className="text-sm text-emerald-900/70">{comment.text}</p>
+                    </div>
+                  ))}
+                </div>
+                {user && (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="আপনার মতামত লিখুন..."
+                      className="flex-1 p-3 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                      value={commentTexts[post.id] || ''}
+                      onChange={(e) => setCommentTexts({ ...commentTexts, [post.id]: e.target.value })}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddComment(post.id)}
+                    />
+                    <button 
+                      onClick={() => handleAddComment(post.id)}
+                      className="bg-emerald-600 text-white p-3 rounded-xl"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ChatSection = ({ user }: { user: any }) => {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'chat_messages'), orderBy('createdAt', 'asc'), limit(100));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !user) return;
+    try {
+      await addDoc(collection(db, 'chat_messages'), {
+        text: newMessage,
+        authorName: user.displayName || 'Anonymous',
+        authorId: user.uid,
+        authorPhoto: user.photoURL || '',
+        createdAt: Date.now()
+      });
+      setNewMessage('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'chat_messages');
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="pt-32 flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
+          <Lock size={40} />
+        </div>
+        <h2 className="text-2xl font-bold text-emerald-950 mb-4">চ্যাট করতে লগইন করুন</h2>
+        <p className="text-emerald-900/60 mb-8">কমিউনিটির সবার সাথে কথা বলতে আপনাকে অবশ্যই লগইন করতে হবে।</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 pt-20 pb-20 bg-emerald-50/30 flex flex-col">
+      <div className="bg-white p-4 border-b border-emerald-100 flex items-center gap-3">
+        <div className="w-10 h-10 bg-emerald-600 text-white rounded-full flex items-center justify-center">
+          <Users size={20} />
+        </div>
+        <div>
+          <h2 className="font-bold text-emerald-950">সাউদাস কমিউনিটি চ্যাট</h2>
+          <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> সবার জন্য উন্মুক্ত
+          </p>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg, idx) => {
+          const isMe = msg.authorId === user.uid;
+          const showName = idx === 0 || messages[idx-1].authorId !== msg.authorId;
+
+          return (
+            <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+              {showName && !isMe && (
+                <span className="text-[10px] font-bold text-emerald-900/40 ml-10 mb-1">{msg.authorName}</span>
+              )}
+              <div className={cn("flex items-end gap-2 max-w-[80%]", isMe && "flex-row-reverse")}>
+                {!isMe && (
+                  <div className="w-8 h-8 rounded-full bg-emerald-200 flex-shrink-0 overflow-hidden border border-white shadow-sm">
+                    {msg.authorPhoto ? <img src={msg.authorPhoto} alt="" className="w-full h-full object-cover" /> : <UserIcon size={16} className="m-2 text-emerald-600" />}
+                  </div>
+                )}
+                <div className={cn(
+                  "p-3 rounded-2xl text-sm shadow-sm",
+                  isMe ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white text-emerald-950 rounded-tl-none border border-emerald-50"
+                )}>
+                  {msg.text}
+                  <div className={cn("text-[8px] mt-1 opacity-50 text-right", isMe ? "text-white" : "text-emerald-900/40")}>
+                    {new Date(msg.createdAt).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="p-4 bg-white border-t border-emerald-100 flex gap-2">
+        <input 
+          type="text" 
+          placeholder="মেসেজ লিখুন..."
+          className="flex-1 p-4 rounded-2xl bg-emerald-50/50 border-none focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+        />
+        <button 
+          onClick={handleSendMessage}
+          className="bg-emerald-600 text-white p-4 rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-transform"
+        >
+          <ArrowRight size={20} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const QuickLinks = ({ setView }: { setView: (v: any) => void }) => {
+  const links = [
+    { title: 'নোটিশ বোর্ড', icon: Bell, color: 'bg-blue-50 text-blue-600', view: 'notice' },
+    { title: 'সদস্য তালিকা', icon: Users, color: 'bg-purple-50 text-purple-600', view: 'directory' },
+    { title: 'ইভেন্টসমূহ', icon: Calendar, color: 'bg-orange-50 text-orange-600', view: 'events' },
+    { title: 'রক্তদান পোস্ট', icon: Droplets, color: 'bg-red-50 text-red-600', view: 'blood' },
+    { title: 'কমিউনিটি চ্যাট', icon: MessageCircle, color: 'bg-emerald-50 text-emerald-600', view: 'chat' },
+    { title: 'অনুদান দিন', icon: Heart, color: 'bg-pink-50 text-pink-600', view: 'payment' },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-12">
+      {links.map((link) => (
+        <button
+          key={link.title}
+          onClick={() => setView(link.view)}
+          className="bg-white p-6 rounded-3xl shadow-sm border border-emerald-50 flex flex-col items-center gap-3 hover:shadow-md transition-all active:scale-95 group"
+        >
+          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110", link.color)}>
+            <link.icon size={24} />
+          </div>
+          <span className="font-bold text-emerald-950 text-sm">{link.title}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const Hero = ({ setView, config }: { setView: (v: any) => void, config: SiteConfig }) => {
   const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(50);
 
@@ -480,12 +1078,22 @@ const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void 
     };
   }, []);
 
+  const getIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'Droplets': return <Droplets size={24} />;
+      case 'Activity': return <Activity size={24} />;
+      case 'Heart': return <Heart size={24} />;
+      case 'Users': return <Users size={24} />;
+      default: return <Activity size={24} />;
+    }
+  };
+
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
       {/* Background with Overlay */}
       <div className="absolute inset-0 z-0">
         <img
-          src="https://images.unsplash.com/photo-1542810634-71277d95dcbb?q=80&w=2070&auto=format&fit=crop"
+          src={config.hero.bgImage}
           alt="সাউদাস মানবিক কার্যক্রম ও আশা"
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
@@ -503,55 +1111,42 @@ const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void 
             সামাজিক কল্যাণমূলক দাতব্য সংস্থা
           </span>
           <h1 className="text-5xl md:text-7xl font-bold text-white leading-[1.1] mb-6">
-            মানবতার সেবায় <span className="text-emerald-400">আমরা</span> পাশে আছি
+            {config.hero.title.split(' ').map((word, i) => (
+              <React.Fragment key={i}>
+                {word === 'আমরা' ? <span className="text-emerald-400">{word}</span> : word}{' '}
+              </React.Fragment>
+            ))}
           </h1>
           <p className="text-lg text-emerald-50/80 mb-10 max-w-lg leading-relaxed">
-            সামাজিক উন্নয়ন দাতব্য সংস্থা (সাউদাস) দারিদ্র্য বিমোচন, চিকিৎসা সহায়তা এবং টেকসই সামাজিক উন্নয়নে নিবেদিত।
+            {config.hero.subtitle}
           </p>
           <div className="flex flex-wrap gap-4">
-            <a
+            <motion.a
               href="#join"
-              className="bg-emerald-500 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-emerald-400 transition-all flex items-center gap-2 group shadow-xl shadow-emerald-500/20"
+              animate={{ 
+                scale: [1, 1.05, 1],
+                boxShadow: [
+                  "0 20px 25px -5px rgba(16, 185, 129, 0.1), 0 8px 10px -6px rgba(16, 185, 129, 0.1)",
+                  "0 20px 25px -5px rgba(16, 185, 129, 0.3), 0 8px 10px -6px rgba(16, 185, 129, 0.3)",
+                  "0 20px 25px -5px rgba(16, 185, 129, 0.1), 0 8px 10px -6px rgba(16, 185, 129, 0.1)"
+                ]
+              }}
+              transition={{ 
+                duration: 2, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+              className="bg-emerald-500 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-emerald-400 transition-all flex items-center gap-2 group shadow-xl"
             >
               সদস্য হন
               <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
-            </a>
+            </motion.a>
             <button
               onClick={() => setView('payment')}
               className="bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20"
             >
               দান করুন
             </button>
-          </div>
-
-          <div className="mt-12 flex items-center gap-6">
-            <div className="flex -space-x-4">
-              {activeMembers.length > 0 ? (
-                activeMembers.map((member) => (
-                  <div key={member.id} className="w-12 h-12 rounded-full border-2 border-emerald-900 overflow-hidden bg-emerald-800">
-                    {member.image ? (
-                      <img src={member.image} alt={member.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-emerald-400">
-                        <UserCircle size={24} />
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                [1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-12 h-12 rounded-full border-2 border-emerald-900 overflow-hidden bg-emerald-800">
-                    <img src={`https://i.pravatar.cc/150?u=${i}`} alt="সদস্য" referrerPolicy="no-referrer" />
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="text-emerald-100/80 text-sm">
-              <span className="text-white font-bold block text-lg">
-                <AnimatedCounter target={totalCount} />+
-              </span>
-              সক্রিয় সদস্য
-            </div>
           </div>
         </motion.div>
 
@@ -570,14 +1165,18 @@ const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void 
             />
           </div>
           {/* Floating Stats */}
-          <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-2xl shadow-2xl z-20 flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
-              <Droplets size={24} />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-emerald-900">১.২k+</div>
-              <div className="text-xs text-emerald-600 font-medium uppercase tracking-wider">রক্তদাতা</div>
-            </div>
+          <div className="absolute -bottom-6 -left-6 flex flex-col gap-4 z-20">
+            {config.hero.stats.map((stat, i) => (
+              <div key={i} className="bg-white p-6 rounded-2xl shadow-2xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                  {getIcon(stat.icon)}
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-emerald-900">{stat.value}</div>
+                  <div className="text-xs text-emerald-600 font-medium uppercase tracking-wider">{stat.label}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </motion.div>
       </div>
@@ -585,7 +1184,7 @@ const Hero = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => void 
   );
 };
 
-const About = () => {
+const About = ({ config }: { config: SiteConfig }) => {
   const [gallery, setGallery] = useState<any[]>([]);
 
   useEffect(() => {
@@ -606,9 +1205,13 @@ const About = () => {
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
           >
-            <h2 className="text-emerald-600 font-bold text-sm uppercase tracking-widest mb-4">আমাদের সম্পর্কে</h2>
+            <h2 className="text-emerald-600 font-bold text-sm uppercase tracking-widest mb-4">{config.about.title}</h2>
             <h3 className="text-4xl md:text-5xl font-bold text-emerald-950 mb-8 leading-tight">
-              মানবতার সেবায় আমরা - <span className="text-emerald-600">সাউদাস (SAUDAS)</span>
+              {config.about.subtitle.split('-').map((part, i) => (
+                <React.Fragment key={i}>
+                  {i === 1 ? <span className="text-emerald-600">{part}</span> : part}
+                </React.Fragment>
+              ))}
             </h3>
             
             <div className="space-y-8">
@@ -617,10 +1220,10 @@ const About = () => {
                   <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600">
                     <Calendar size={18} />
                   </div>
-                  আমাদের গল্প
+                  {config.about.storyTitle}
                 </h4>
                 <p className="text-emerald-900/70 leading-relaxed">
-                  ২০২৪ সাল থেকে আমরা একদল উদ্যমী মানুষ একত্রিত হয়েছি সমাজের পিছিয়ে পড়া মানুষদের জন্য কিছু করার তাগিদে। সাউদাস শুধু একটি নাম নয়, এটি একটি আস্থার প্রতীক।
+                  {config.about.storyContent}
                 </p>
               </div>
 
@@ -911,6 +1514,7 @@ const Services = () => {
 const ActiveMembers = () => {
   const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<any | null>(null);
 
   useEffect(() => {
     if (!db) return;
@@ -984,7 +1588,8 @@ const ActiveMembers = () => {
             {displayMembers.map((leader, idx) => (
               <div
                 key={`leader-${leader.id}-${idx}`}
-                className="w-[280px] bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-900/5 hover:shadow-emerald-900/10 transition-all group relative overflow-hidden flex-shrink-0"
+                className="w-[280px] bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-900/5 hover:shadow-emerald-900/10 transition-all group relative overflow-hidden flex-shrink-0 cursor-pointer"
+                onClick={() => setSelectedMember(leader)}
               >
                 <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-[3rem] -mr-4 -mt-4 group-hover:bg-emerald-100 transition-colors" />
                 <div className="relative z-10">
@@ -1018,19 +1623,248 @@ const ActiveMembers = () => {
             ))}
           </motion.div>
         </div>
+
+        <AnimatePresence>
+          {selectedMember && (
+            <MemberProfileModal 
+              member={selectedMember} 
+              onClose={() => setSelectedMember(null)} 
+            />
+          )}
+        </AnimatePresence>
       </div>
     </section>
   );
 };
 
-const MemberDirectory = () => {
+const MemberProfileModal = ({ member, onClose }: { member: any, onClose: () => void }) => {
+  if (!member) return null;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-6">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-emerald-950/80 backdrop-blur-md"
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative bg-white w-full max-w-2xl rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row"
+      >
+        <button onClick={onClose} className="absolute top-6 right-6 z-20 p-2 bg-white/20 backdrop-blur-md text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors">
+          <X size={24} />
+        </button>
+
+        <div className="w-full md:w-2/5 bg-emerald-600 relative overflow-hidden flex flex-col items-center justify-center p-12 text-center">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-12 -mb-12" />
+          
+          <div className="relative z-10">
+            <div className="w-32 h-32 rounded-[2rem] overflow-hidden border-4 border-white/20 shadow-2xl mb-6 mx-auto bg-emerald-500 flex items-center justify-center">
+              {member.image ? (
+                <img src={member.image} alt={member.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <UserCircle size={80} className="text-white/40" />
+              )}
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">{member.name}</h3>
+            <span className="inline-block px-4 py-1 bg-white/20 rounded-full text-white text-xs font-bold uppercase tracking-widest">
+              {member.role}
+            </span>
+          </div>
+        </div>
+
+        <div className="w-full md:w-3/5 p-8 md:p-12 overflow-y-auto max-h-[70vh] md:max-h-none">
+          <div className="space-y-8">
+            <div>
+              <h4 className="text-[10px] uppercase font-bold tracking-[0.2em] text-emerald-400 mb-4">ব্যক্তিগত তথ্য</h4>
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                    <MapPin size={20} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-900/40 font-bold uppercase mb-0.5">ঠিকানা</div>
+                    <div className="text-emerald-950 font-medium">{member.address || 'তথ্য নেই'}</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center text-red-600 flex-shrink-0">
+                    <Droplets size={20} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-900/40 font-bold uppercase mb-0.5">রক্তের গ্রুপ</div>
+                    <div className="text-red-600 font-bold">{member.bloodGroup || 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] uppercase font-bold tracking-[0.2em] text-emerald-400 mb-4">যোগাযোগ</h4>
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                    <Phone size={20} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-900/40 font-bold uppercase mb-0.5">ফোন নম্বর</div>
+                    <a href={`tel:${member.phone}`} className="text-emerald-950 font-bold hover:text-emerald-600 transition-colors">{member.phone}</a>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 flex-shrink-0">
+                    <Mail size={20} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-900/40 font-bold uppercase mb-0.5">ইমেইল</div>
+                    <div className="text-emerald-950 font-medium break-all">{member.email || 'তথ্য নেই'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-emerald-50">
+              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-900/20">
+                <span>সাউদাস মেম্বার আইডি: {member.id.substring(0, 8).toUpperCase()}</span>
+                <span>{member.isStatic ? 'প্রাথমিক সদস্য' : 'নিবন্ধিত সদস্য'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("সব");
   const [dbMembers, setDbMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<any | null>(null);
   const PAGE_SIZE = 20;
+
+  const MemberProfileModal = ({ member, onClose }: { member: any; onClose: () => void }) => {
+    if (!member) return null;
+    return (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 md:p-6">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+          className="absolute inset-0 bg-black/90 backdrop-blur-md"
+        />
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 40 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 40 }}
+          className="relative bg-emerald-950 border border-emerald-800/50 w-full max-w-2xl rounded-[2.5rem] overflow-hidden shadow-2xl"
+        >
+          <div className="absolute top-6 right-6 z-10">
+            <button 
+              onClick={onClose}
+              className="p-3 bg-emerald-900/50 hover:bg-emerald-800 text-emerald-400 rounded-2xl transition-all hover:scale-110 active:scale-95"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="h-48 bg-gradient-to-br from-emerald-600 to-emerald-900 relative">
+            <div className="absolute -bottom-16 left-8 md:left-12">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-emerald-950 border-4 border-emerald-950 overflow-hidden shadow-2xl ring-4 ring-emerald-500/20">
+                <img 
+                  src={member.photoURL || `https://picsum.photos/seed/${member.name}/400/400`} 
+                  alt={member.name}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-20 pb-10 px-8 md:px-12">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">{member.name}</h2>
+                <div className="flex items-center gap-3">
+                  <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-sm font-medium">
+                    {member.role || member.designation}
+                  </span>
+                  {member.bloodGroup && member.bloodGroup !== 'N/A' && (
+                    <span className="px-4 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-sm font-medium flex items-center gap-2">
+                      <Droplets size={14} />
+                      {member.bloodGroup}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <a 
+                  href={`tel:${member.phone || member.mobile}`}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold rounded-2xl transition-all hover:-translate-y-1 shadow-lg shadow-emerald-500/20"
+                >
+                  <Phone size={20} />
+                  কল করুন
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div className="p-6 bg-emerald-900/20 border border-emerald-800/30 rounded-3xl">
+                  <h3 className="text-emerald-500 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <MapPin size={14} />
+                    ঠিকানা
+                  </h3>
+                  <p className="text-emerald-100 text-lg leading-relaxed">
+                    {member.address || "তথ্য নেই"}
+                  </p>
+                </div>
+                <div className="p-6 bg-emerald-900/20 border border-emerald-800/30 rounded-3xl">
+                  <h3 className="text-emerald-500 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Phone size={14} />
+                    মোবাইল নম্বর
+                  </h3>
+                  <p className="text-emerald-100 text-lg font-mono">
+                    {member.phone || member.mobile || "তথ্য নেই"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-6 bg-emerald-900/20 border border-emerald-800/30 rounded-3xl">
+                  <h3 className="text-emerald-500 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Mail size={14} />
+                    ইমেইল
+                  </h3>
+                  <p className="text-emerald-100 text-lg break-all">
+                    {member.email || "তথ্য নেই"}
+                  </p>
+                </div>
+                <div className="p-6 bg-emerald-900/20 border border-emerald-800/30 rounded-3xl">
+                  <h3 className="text-emerald-500 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Calendar size={14} />
+                    সদস্যপদ
+                  </h3>
+                  <p className="text-emerald-100 text-lg">
+                    {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString('bn-BD') : "প্রতিষ্ঠাতা সদস্য"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
 
   const fetchMembers = async (isNext = false) => {
     if (!db) return;
@@ -1085,7 +1919,7 @@ const MemberDirectory = () => {
       address: m.address,
       phone: m.mobile,
       email: '',
-      bloodGroup: 'N/A',
+      bloodGroup: (m as any).bloodGroup || 'N/A',
       status: 'approved',
       isStatic: true,
       joinedAt: m.id // Use ID as a sort key for static members
@@ -1108,9 +1942,18 @@ const MemberDirectory = () => {
   });
 
   return (
-    <section id="directory" className="py-24 bg-emerald-50/50">
+    <section id="directory" className={cn("py-24 bg-emerald-50/50 min-h-screen", onBack && "pt-32")}>
       <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="mb-8 flex items-center gap-2 text-emerald-600 font-bold hover:text-emerald-700 transition-colors"
+          >
+            <ArrowLeft size={20} />
+            ফিরে যান
+          </button>
+        )}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
           <div className="max-w-2xl">
             <h2 className="text-emerald-600 font-bold text-sm uppercase tracking-widest mb-4">সম্প্রদায় ডিরেক্টরি</h2>
             <h3 className="text-4xl font-bold text-emerald-950 mb-4">নিবন্ধিত সদস্যগণ</h3>
@@ -1170,7 +2013,8 @@ const MemberDirectory = () => {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.01 }}
-                    className="hover:bg-emerald-50/30 transition-colors"
+                    className="hover:bg-emerald-50/30 transition-colors cursor-pointer"
+                    onClick={() => setSelectedMember(member)}
                   >
                     <td className="pl-8 pr-4 py-5 text-emerald-900/40 font-mono text-sm">
                       {toBengaliNumber(idx + 1)}
@@ -1238,6 +2082,15 @@ const MemberDirectory = () => {
             </button>
           </div>
         )}
+
+        <AnimatePresence>
+          {selectedMember && (
+            <MemberProfileModal 
+              member={selectedMember} 
+              onClose={() => setSelectedMember(null)} 
+            />
+          )}
+        </AnimatePresence>
       </div>
     </section>
   );
@@ -1466,7 +2319,7 @@ const RegistrationForm = ({ showNotification }: { showNotification: (m: string, 
   );
 };
 
-const Contact = () => {
+const Contact = ({ config }: { config: SiteConfig }) => {
   return (
     <section id="contact" className="py-24 bg-emerald-50/30">
       <div className="max-w-7xl mx-auto px-6">
@@ -1482,9 +2335,9 @@ const Contact = () => {
 
             <div className="space-y-6">
               {[
-                { icon: <Phone />, title: "ফোন", value: "+৮৮ ০১৯২৪-৪৬৫৪৫৪", href: "tel:+8801924465454" },
-                { icon: <Mail />, title: "ইমেইল", value: "sdoo07072025@gmail.com", href: "mailto:sdoo07072025@gmail.com" },
-                { icon: <MapPin />, title: "অফিস", value: "প্রধান কার্যালয়ঃ রাজগঞ্জ, মনিরামপুর, যশোর।" }
+                { icon: <Phone />, title: "ফোন", value: config.contact.phone, href: `tel:${config.contact.phone}` },
+                { icon: <Mail />, title: "ইমেইল", value: config.contact.email, href: `mailto:${config.contact.email}` },
+                { icon: <MapPin />, title: "অফিস", value: config.contact.address }
               ].map((item) => (
                 <div key={item.title} className="flex gap-4">
                   <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
@@ -1602,8 +2455,10 @@ const Footer = ({ setView }: { setView: (v: 'home' | 'admin' | 'payment') => voi
 };
 
 const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNotification: (m: string, t: 'success' | 'error') => void }) => {
+  const [isRegister, setIsRegister] = useState(false);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [registerData, setRegisterData] = useState({ name: '', phone: '', email: '', password: '', bloodGroup: 'A+', address: '' });
   const [loading, setLoading] = useState(false);
 
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
@@ -1624,7 +2479,6 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
             try {
               await createUserWithEmailAndPassword(auth, email, loginPassword);
             } catch (createError: any) {
-              // If creation fails (e.g. user already exists but password was wrong), let the original error handle it
               throw error;
             }
           } else {
@@ -1633,12 +2487,17 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
         }
       } else {
         if (/^[\d+-\s]+$/.test(loginIdentifier)) {
-          const q = query(collection(db, 'users'), where('phone', '==', loginIdentifier));
-          const querySnapshot = await getDocs(q);
-          if (querySnapshot.empty) {
-            throw new Error("এই ফোন নম্বর দিয়ে কোনো এডমিন অ্যাকাউন্ট পাওয়া যায়নি।");
+          try {
+            const q = query(collection(db, 'users'), where('phone', '==', loginIdentifier));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+              throw new Error("এই ফোন নম্বর দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।");
+            }
+            email = querySnapshot.docs[0].data().email;
+          } catch (err: any) {
+            console.error("Firestore query error in LoginModal:", err);
+            throw err;
           }
-          email = querySnapshot.docs[0].data().email;
         }
         await signInWithEmailAndPassword(auth, email, loginPassword);
       }
@@ -1647,11 +2506,39 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
       onClose();
     } catch (error: any) {
       console.error("Login failed:", error);
-      let errorMessage = "লগইন ব্যর্থ হয়েছে।";
+      let errorMessage = error.message || "লগইন ব্যর্থ হয়েছে।";
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড।";
       }
       showNotification(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, registerData.email, registerData.password);
+      const user = userCredential.user;
+      
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        name: registerData.name,
+        phone: registerData.phone,
+        email: registerData.email,
+        bloodGroup: registerData.bloodGroup,
+        address: registerData.address,
+        role: 'user',
+        createdAt: serverTimestamp()
+      });
+
+      showNotification("সফলভাবে রেজিস্ট্রেশন সম্পন্ন হয়েছে।", 'success');
+      onClose();
+    } catch (error: any) {
+      console.error("Registration failed:", error);
+      showNotification(error.message || "রেজিস্ট্রেশন ব্যর্থ হয়েছে।", 'error');
     } finally {
       setLoading(false);
     }
@@ -1670,7 +2557,7 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="relative bg-emerald-900 border border-emerald-800 w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl p-8 md:p-12"
+        className="relative bg-emerald-900 border border-emerald-800 w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl p-8 md:p-12 max-h-[90vh] overflow-y-auto"
       >
         <button onClick={onClose} className="absolute top-6 right-6 p-2 text-emerald-400 hover:text-white transition-colors">
           <X size={24} />
@@ -1678,73 +2565,303 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
 
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-emerald-600/20">
-            <Lock size={32} />
+            {isRegister ? <UserPlus size={32} /> : <Lock size={32} />}
           </div>
-          <h2 className="text-3xl font-bold text-white mb-2">এডমিন লগইন</h2>
-          <p className="text-emerald-400">আপনার একাউন্টে প্রবেশ করুন</p>
+          <h2 className="text-3xl font-bold text-white mb-2">{isRegister ? 'রেজিস্ট্রেশন' : 'লগইন'}</h2>
+          <p className="text-emerald-400">{isRegister ? 'নতুন একাউন্ট তৈরি করুন' : 'আপনার একাউন্টে প্রবেশ করুন'}</p>
         </div>
 
-        <form onSubmit={handleEmailPasswordLogin} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-emerald-100/70 text-sm font-medium ml-1">ইমেইল অথবা ফোন নম্বর</label>
-            <div className="relative">
-              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+        {isRegister ? (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-emerald-100/70 text-xs font-medium ml-1">পূর্ণ নাম</label>
               <input
                 required
                 type="text"
-                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                placeholder="admin / 017XXXXXXXX"
-                value={loginIdentifier}
-                onChange={(e) => setLoginIdentifier(e.target.value)}
+                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                value={registerData.name}
+                onChange={(e) => setRegisterData({...registerData, name: e.target.value})}
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-emerald-100/70 text-sm font-medium ml-1">পাসওয়ার্ড</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-emerald-100/70 text-xs font-medium ml-1">মোবাইল নম্বর</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                  value={registerData.phone}
+                  onChange={(e) => setRegisterData({...registerData, phone: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-emerald-100/70 text-xs font-medium ml-1">রক্তের গ্রুপ</label>
+                <select
+                  className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                  value={registerData.bloodGroup}
+                  onChange={(e) => setRegisterData({...registerData, bloodGroup: e.target.value})}
+                >
+                  {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-emerald-100/70 text-xs font-medium ml-1">ইমেইল</label>
+              <input
+                required
+                type="email"
+                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                value={registerData.email}
+                onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-emerald-100/70 text-xs font-medium ml-1">পাসওয়ার্ড</label>
               <input
                 required
                 type="password"
-                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                placeholder="••••••••"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                value={registerData.password}
+                onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
               />
             </div>
-          </div>
+            <div className="space-y-1">
+              <label className="text-emerald-100/70 text-xs font-medium ml-1">ঠিকানা</label>
+              <input
+                required
+                type="text"
+                className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                value={registerData.address}
+                onChange={(e) => setRegisterData({...registerData, address: e.target.value})}
+              />
+            </div>
+            <button
+              disabled={loading}
+              type="submit"
+              className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50 mt-4"
+            >
+              {loading ? "প্রসেসিং..." : "রেজিস্ট্রেশন করুন"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleEmailPasswordLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-emerald-100/70 text-sm font-medium ml-1">ইমেইল অথবা ফোন নম্বর</label>
+              <div className="relative">
+                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+                <input
+                  required
+                  type="text"
+                  className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                  placeholder="admin / 017XXXXXXXX"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                />
+              </div>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50"
+            <div className="space-y-2">
+              <label className="text-emerald-100/70 text-sm font-medium ml-1">পাসওয়ার্ড</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+                <input
+                  required
+                  type="password"
+                  className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button
+              disabled={loading}
+              type="submit"
+              className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50"
+            >
+              {loading ? "লগইন হচ্ছে..." : "লগইন করুন"}
+            </button>
+          </form>
+        )}
+
+        <div className="mt-8 text-center">
+          <button 
+            onClick={() => setIsRegister(!isRegister)}
+            className="text-emerald-400 hover:text-emerald-300 transition-colors text-sm font-medium"
           >
-            {loading ? "প্রবেশ করা হচ্ছে..." : "লগইন করুন"}
+            {isRegister ? 'ইতিমধ্যে একাউন্ট আছে? লগইন করুন' : 'নতুন একাউন্ট তৈরি করতে চান? রেজিস্ট্রেশন করুন'}
           </button>
-        </form>
+        </div>
       </motion.div>
     </div>
   );
 };
 
-const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: { 
+const ProfileSection = ({ user, showNotification }: { user: any, showNotification: (m: string, t: 'success' | 'error') => void }) => {
+  const [userData, setUserData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editData, setEditData] = useState({ name: '', phone: '', bloodGroup: '', address: '' });
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserData(data);
+        setEditData({
+          name: data.name || '',
+          phone: data.phone || '',
+          bloodGroup: data.bloodGroup || '',
+          address: data.address || ''
+        });
+      }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [user]);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        ...editData,
+        updatedAt: serverTimestamp()
+      });
+      showNotification("প্রোফাইল সফলভাবে আপডেট করা হয়েছে।", 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      showNotification("আপডেট ব্যর্থ হয়েছে।", 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-emerald-950">
+      <Activity className="text-emerald-500 animate-spin" size={48} />
+    </div>
+  );
+
+  return (
+    <section className="min-h-screen pt-32 pb-20 bg-emerald-950">
+      <div className="max-w-4xl mx-auto px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-emerald-900/40 border border-emerald-800 rounded-[3rem] overflow-hidden shadow-2xl"
+        >
+          <div className="h-48 bg-gradient-to-r from-emerald-600 to-emerald-800 relative">
+            <div className="absolute -bottom-16 left-12">
+              <div className="w-32 h-32 rounded-[2rem] bg-emerald-950 border-4 border-emerald-950 overflow-hidden shadow-2xl ring-4 ring-emerald-500/20 flex items-center justify-center">
+                {userData?.photoURL ? (
+                  <img src={userData.photoURL} alt={userData.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <UserIcon size={64} className="text-emerald-800" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-20 pb-12 px-12">
+            <div className="mb-10">
+              <h2 className="text-3xl font-bold text-white mb-2">{userData?.name}</h2>
+              <p className="text-emerald-400 font-medium">{userData?.role === 'admin' ? 'অ্যাডমিন' : 'সদস্য'}</p>
+            </div>
+
+            <form onSubmit={handleUpdateProfile} className="grid md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2 ml-1">পূর্ণ নাম</label>
+                  <input
+                    type="text"
+                    className="w-full bg-emerald-950 border border-emerald-800 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={editData.name}
+                    onChange={(e) => setEditData({...editData, name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2 ml-1">মোবাইল নম্বর</label>
+                  <input
+                    type="text"
+                    className="w-full bg-emerald-950 border border-emerald-800 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={editData.phone}
+                    onChange={(e) => setEditData({...editData, phone: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2 ml-1">রক্তের গ্রুপ</label>
+                  <select
+                    className="w-full bg-emerald-950 border border-emerald-800 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none"
+                    value={editData.bloodGroup}
+                    onChange={(e) => setEditData({...editData, bloodGroup: e.target.value})}
+                  >
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
+                      <option key={bg} value={bg}>{bg}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2 ml-1">ঠিকানা</label>
+                  <input
+                    type="text"
+                    className="w-full bg-emerald-950 border border-emerald-800 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={editData.address}
+                    onChange={(e) => setEditData({...editData, address: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2 pt-6">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {saving ? <Activity className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                  তথ্য আপডেট করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+};
+
+const AdminPanel = ({ user, showNotification, setConfirmConfig, setView, siteConfig }: { 
   user: User, 
   showNotification: (m: string, t: 'success' | 'error') => void,
   setConfirmConfig: (config: any) => void,
-  setView: (v: 'home' | 'admin') => void
+  setView: (v: 'home' | 'admin' | 'directory' | 'payment' | 'blood' | 'chat' | 'notice' | 'events') => void,
+  siteConfig: SiteConfig
 }) => {
   const [adminData, setAdminData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery' | 'active_members' | 'donations'>('approved');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'services' | 'gallery' | 'active_members' | 'donations' | 'site_config' | 'events'>('approved');
   const [members, setMembers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [activeMembers, setActiveMembers] = useState<any[]>([]);
   const [gallery, setGallery] = useState<any[]>([]);
   const [donations, setDonations] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [localConfig, setLocalConfig] = useState<SiteConfig>(siteConfig);
+  const [newEvent, setNewEvent] = useState({ title: '', date: '', time: '', location: '', description: '', image: '' });
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
-  const [editType, setEditType] = useState<'member' | 'service' | 'active_member' | null>(null);
+  const [editType, setEditType] = useState<'member' | 'service' | 'active_member' | 'event' | null>(null);
   
   const isAdmin = user?.email === "md.munnahossain885@gmail.com" || user?.email === "admin@saudas.org" || adminData?.role === 'admin';
 
@@ -1866,12 +2983,21 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
       handleFirestoreError(error, OperationType.GET, 'donations');
     });
 
+    // Fetch events
+    const qEvents = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const unsubEvents = onSnapshot(qEvents, (snapshot) => {
+      setEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'events');
+    });
+
     return () => {
       unsubMembers();
       unsubServices();
       unsubGallery();
       unsubActiveMembers();
       unsubDonations();
+      unsubEvents();
     };
   }, [isAdmin, db, adminData]);
 
@@ -1880,6 +3006,23 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
   if (!user) {
     return null;
   }
+
+  useEffect(() => {
+    setLocalConfig(siteConfig);
+  }, [siteConfig]);
+
+  const handleSaveConfig = async () => {
+    if (!db) return;
+    setLoading(true);
+    try {
+      await setDoc(doc(db, 'site_config', 'main'), localConfig);
+      showNotification("সাইট কন্টেন্ট সফলভাবে আপডেট করা হয়েছে।", 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'site_config/main');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const updateMemberStatus = async (id: string, status: 'approved' | 'rejected') => {
     if (!db) return;
@@ -1925,6 +3068,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
     if (editType === 'member') targetCollection = 'members';
     else if (editType === 'service') targetCollection = 'services';
     else if (editType === 'active_member') targetCollection = 'active_members';
+    else if (editType === 'event') targetCollection = 'events';
 
     try {
       const { id, isStatic, ...data } = editingItem;
@@ -1933,6 +3077,9 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
         if (editType === 'member') {
           data.joinedAt = data.joinedAt || Date.now();
           data.status = 'approved';
+        }
+        if (editType === 'event') {
+          data.createdAt = Date.now();
         }
         await addDoc(collection(db, targetCollection), data);
         showNotification("সফলভাবে যোগ করা হয়েছে।", 'success');
@@ -1950,7 +3097,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'member' | 'service' | 'gallery') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'member' | 'service' | 'gallery' | 'event' | 'site_config') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
@@ -1967,7 +3114,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
 
     setUploading(true);
     try {
-      const path = type === 'member' ? 'members' : type === 'service' ? 'services' : 'gallery';
+      const path = type === 'member' ? 'members' : type === 'service' ? 'services' : type === 'event' ? 'events' : type === 'site_config' ? 'site_config' : 'gallery';
       const uploadedUrls: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
@@ -2025,6 +3172,12 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
           });
         }
         showNotification(`${uploadedUrls.length}টি ছবি গ্যালারিতে যোগ করা হয়েছে।`, 'success');
+      } else if (type === 'site_config') {
+        setLocalConfig(prev => ({
+          ...prev,
+          hero: { ...prev.hero, bgImage: uploadedUrls[0] }
+        }));
+        showNotification("হিরো ইমেজ আপলোড সম্পন্ন হয়েছে।", 'success');
       } else {
         setEditingItem((prev: any) => {
           if (!prev) return null;
@@ -2145,6 +3298,9 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                     setEditingItem({ id: 'new', name: '', role: '', image: '', address: '', phone: '', order: activeMembers.length });
                   } else if (activeTab === 'gallery') {
                     document.getElementById('gallery-upload')?.click();
+                  } else if (activeTab === 'events') {
+                    setEditType('event');
+                    setEditingItem({ id: 'new', title: '', date: '', time: '', location: '', description: '', image: '', createdAt: Date.now() });
                   }
                 }}
                 className="flex-grow sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition-all shadow-lg"
@@ -2167,7 +3323,9 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
               { id: 'services', label: 'সেবা' },
               { id: 'gallery', label: 'গ্যালারি' },
               { id: 'active_members', label: 'সক্রিয় সদস্য' },
-              { id: 'donations', label: 'অনুদান' }
+              { id: 'donations', label: 'অনুদান' },
+              { id: 'site_config', label: 'সাইট কন্টেন্ট' },
+              { id: 'events', label: 'ইভেন্ট' }
             ].map((tab) => (
               <button 
                 key={tab.id}
@@ -2185,6 +3343,398 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
 
         {/* Tab Content */}
         <div className="bg-emerald-900/30 rounded-3xl border border-emerald-800/50 overflow-hidden backdrop-blur-sm">
+          {activeTab === 'site_config' && (
+            <div className="p-6 space-y-12">
+              <div className="grid md:grid-cols-2 gap-12">
+                {/* Hero Section Edit */}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-emerald-400 border-b border-emerald-800 pb-2 flex items-center gap-2">
+                    <Home size={20} /> Hero Section
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Title</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.hero.title}
+                        onChange={(e) => setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, title: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Subtitle</label>
+                      <textarea 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white h-24 focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.hero.subtitle}
+                        onChange={(e) => setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, subtitle: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Background Image</label>
+                      <div className="flex gap-4 items-start">
+                        <div className="w-24 h-16 rounded-lg overflow-hidden bg-emerald-950 border border-emerald-800 flex-shrink-0">
+                          <img src={localConfig.hero.bgImage} alt="Hero BG" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div className="flex-grow space-y-2">
+                          <input 
+                            type="text" 
+                            className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-xs text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            value={localConfig.hero.bgImage}
+                            onChange={(e) => setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, bgImage: e.target.value } })}
+                            placeholder="Image URL"
+                          />
+                          <button 
+                            onClick={() => document.getElementById('hero-upload')?.click()}
+                            disabled={uploading}
+                            className="flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                          >
+                            <Camera size={14} /> {uploading ? "আপলোড হচ্ছে..." : "ছবি আপলোড করুন"}
+                          </button>
+                          <input 
+                            id="hero-upload"
+                            type="file" 
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleImageUpload(e, 'site_config')}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-3">Hero Stats</label>
+                      <div className="space-y-3">
+                        {localConfig.hero.stats.map((stat, idx) => (
+                          <div key={idx} className="flex gap-2 items-center bg-emerald-800/30 p-3 rounded-xl border border-emerald-700/50">
+                            <input 
+                              type="text" 
+                              className="w-20 bg-emerald-900/50 border border-emerald-700 rounded-lg px-2 py-1 text-xs text-white"
+                              value={stat.value}
+                              onChange={(e) => {
+                                const newStats = [...localConfig.hero.stats];
+                                newStats[idx].value = e.target.value;
+                                setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, stats: newStats } });
+                              }}
+                              placeholder="Value"
+                            />
+                            <input 
+                              type="text" 
+                              className="flex-grow bg-emerald-900/50 border border-emerald-700 rounded-lg px-2 py-1 text-xs text-white"
+                              value={stat.label}
+                              onChange={(e) => {
+                                const newStats = [...localConfig.hero.stats];
+                                newStats[idx].label = e.target.value;
+                                setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, stats: newStats } });
+                              }}
+                              placeholder="Label"
+                            />
+                            <select 
+                              className="bg-emerald-900/50 border border-emerald-700 rounded-lg px-2 py-1 text-xs text-white"
+                              value={stat.icon}
+                              onChange={(e) => {
+                                const newStats = [...localConfig.hero.stats];
+                                newStats[idx].icon = e.target.value;
+                                setLocalConfig({ ...localConfig, hero: { ...localConfig.hero, stats: newStats } });
+                              }}
+                            >
+                              <option value="Droplets">Droplets</option>
+                              <option value="Activity">Activity</option>
+                              <option value="Heart">Heart</option>
+                              <option value="Users">Users</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* About Section Edit */}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-emerald-400 border-b border-emerald-800 pb-2 flex items-center gap-2">
+                    <Users size={20} /> About Section
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Title</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.about.title}
+                        onChange={(e) => setLocalConfig({ ...localConfig, about: { ...localConfig.about, title: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Subtitle</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.about.subtitle}
+                        onChange={(e) => setLocalConfig({ ...localConfig, about: { ...localConfig.about, subtitle: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Story Title</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.about.storyTitle}
+                        onChange={(e) => setLocalConfig({ ...localConfig, about: { ...localConfig.about, storyTitle: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Story Content</label>
+                      <textarea 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white h-32 focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.about.storyContent}
+                        onChange={(e) => setLocalConfig({ ...localConfig, about: { ...localConfig.about, storyContent: e.target.value } })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Section Edit */}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-emerald-400 border-b border-emerald-800 pb-2 flex items-center gap-2">
+                    <Phone size={20} /> Contact Info
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Phone</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.contact.phone}
+                        onChange={(e) => setLocalConfig({ ...localConfig, contact: { ...localConfig.contact, phone: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Email</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.contact.email}
+                        onChange={(e) => setLocalConfig({ ...localConfig, contact: { ...localConfig.contact, email: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Address</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.contact.address}
+                        onChange={(e) => setLocalConfig({ ...localConfig, contact: { ...localConfig.contact, address: e.target.value } })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Section Edit */}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-emerald-400 border-b border-emerald-800 pb-2 flex items-center gap-2">
+                    <Droplets size={20} /> Payment Details
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Treasurer Name</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.payment.treasurerName}
+                        onChange={(e) => setLocalConfig({ ...localConfig, payment: { ...localConfig.payment, treasurerName: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-100/70 mb-1">Treasurer Role</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={localConfig.payment.treasurerRole}
+                        onChange={(e) => setLocalConfig({ ...localConfig, payment: { ...localConfig.payment, treasurerRole: e.target.value } })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-emerald-100/70 mb-1">Bkash</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          value={localConfig.payment.bkash}
+                          onChange={(e) => setLocalConfig({ ...localConfig, payment: { ...localConfig.payment, bkash: e.target.value } })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-emerald-100/70 mb-1">Nagad</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          value={localConfig.payment.nagad}
+                          onChange={(e) => setLocalConfig({ ...localConfig, payment: { ...localConfig.payment, nagad: e.target.value } })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-emerald-100/70 mb-1">Rocket</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-emerald-800/50 border border-emerald-700 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          value={localConfig.payment.rocket}
+                          onChange={(e) => setLocalConfig({ ...localConfig, payment: { ...localConfig.payment, rocket: e.target.value } })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="pt-8 border-t border-emerald-800 flex justify-center">
+                <button 
+                  onClick={handleSaveConfig}
+                  disabled={loading}
+                  className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-3"
+                >
+                  {loading ? <Activity className="animate-spin" /> : <CheckCircle2 />}
+                  পরিবর্তনগুলো সেভ করুন
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'events' && (
+            <div className="p-4 md:p-6 space-y-8">
+              {/* Create Event Form */}
+              <div className="bg-emerald-800/20 border border-emerald-700/50 rounded-3xl p-6">
+                <h4 className="text-lg font-bold text-emerald-400 mb-6 flex items-center gap-2">
+                  <PlusCircle size={20} /> নতুন ইভেন্ট যোগ করুন
+                </h4>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-emerald-500 uppercase mb-1">ইভেন্ট শিরোনাম</label>
+                      <input 
+                        type="text"
+                        placeholder="যেমন: ফ্রি মেডিক্যাল ক্যাম্প"
+                        className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-500 uppercase mb-1">তারিখ</label>
+                        <input 
+                          type="text"
+                          placeholder="১৫ মে, ২০২৪"
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          value={newEvent.date}
+                          onChange={(e) => setNewEvent({...newEvent, date: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-500 uppercase mb-1">সময়</label>
+                        <input 
+                          type="text"
+                          placeholder="সকাল ১০:০০ টা"
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          value={newEvent.time}
+                          onChange={(e) => setNewEvent({...newEvent, time: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-emerald-500 uppercase mb-1">স্থান</label>
+                      <input 
+                        type="text"
+                        placeholder="সাউদাস অফিস প্রাঙ্গণ"
+                        className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={newEvent.location}
+                        onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-emerald-500 uppercase mb-1">বিবরণ</label>
+                      <textarea 
+                        placeholder="ইভেন্ট সম্পর্কে বিস্তারিত লিখুন..."
+                        className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-2.5 text-white h-32 focus:ring-2 focus:ring-emerald-500 outline-none"
+                        value={newEvent.description}
+                        onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
+                      />
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        if (!newEvent.title || !newEvent.date || !newEvent.location) {
+                          showNotification("অনুগ্রহ করে প্রয়োজনীয় তথ্যগুলো পূরণ করুন।", 'error');
+                          return;
+                        }
+                        try {
+                          setLoading(true);
+                          await addDoc(collection(db, 'events'), {
+                            ...newEvent,
+                            createdAt: Date.now()
+                          });
+                          showNotification("ইভেন্ট সফলভাবে যোগ করা হয়েছে।", 'success');
+                          setNewEvent({ title: '', date: '', time: '', location: '', description: '', image: '' });
+                        } catch (error) {
+                          handleFirestoreError(error, OperationType.CREATE, 'events');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                    >
+                      ইভেন্ট যোগ করুন
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {events.map((event) => (
+                  <div key={event.id} className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5 md:p-6 flex flex-col sm:flex-row gap-6">
+                    <div className="w-full sm:w-24 h-48 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 bg-emerald-950">
+                      {event.image ? (
+                        <img src={event.image} alt={event.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-emerald-800">
+                          <Calendar size={32} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-grow">
+                      <h4 className="font-bold text-lg mb-2">{event.title}</h4>
+                      <div className="flex flex-wrap gap-3 mb-4">
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                          <Calendar size={12} /> {event.date}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                          <MapPin size={12} /> {event.location}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={() => {
+                            setEditingItem(event);
+                            setEditType('event');
+                          }}
+                          className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400 transition-colors"
+                        >
+                          <Edit3 size={16} /> এডিট করুন
+                        </button>
+                        <button 
+                          onClick={() => deleteItem('events', event.id)}
+                          className="flex items-center gap-2 text-sm text-red-500 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={16} /> মুছে ফেলুন
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'pending' && (
             <div className="p-4 md:p-0">
               {/* Desktop Table */}
@@ -2750,6 +4300,7 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                     {editingItem.id === 'new' ? 'নতুন যোগ করুন' : (
                       editType === 'member' ? 'সদস্য তথ্য পরিবর্তন' : 
                       editType === 'active_member' ? 'সক্রিয় সদস্য তথ্য পরিবর্তন' : 
+                      editType === 'event' ? 'ইভেন্ট তথ্য পরিবর্তন' :
                       'সেবা তথ্য পরিবর্তন'
                     )}
                   </h3>
@@ -2759,7 +4310,88 @@ const AdminPanel = ({ user, showNotification, setConfirmConfig, setView }: {
                 </div>
 
                 <form onSubmit={handleSaveEdit} className="space-y-6">
-                  {editType === 'member' ? (
+                  {editType === 'event' ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">ইভেন্ট শিরোনাম</label>
+                        <input 
+                          value={editingItem.title}
+                          onChange={(e) => setEditingItem({...editingItem, title: e.target.value})}
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">তারিখ</label>
+                          <input 
+                            value={editingItem.date}
+                            onChange={(e) => setEditingItem({...editingItem, date: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            placeholder="যেমন: ১৫ মে, ২০২৪"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-emerald-500 uppercase">সময়</label>
+                          <input 
+                            value={editingItem.time}
+                            onChange={(e) => setEditingItem({...editingItem, time: e.target.value})}
+                            className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            placeholder="যেমন: সকাল ১০:০০ টা"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">স্থান</label>
+                        <input 
+                          value={editingItem.location}
+                          onChange={(e) => setEditingItem({...editingItem, location: e.target.value})}
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">বিবরণ</label>
+                        <textarea 
+                          value={editingItem.description}
+                          onChange={(e) => setEditingItem({...editingItem, description: e.target.value})}
+                          className="w-full bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 h-32"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-emerald-500 uppercase">ইভেন্ট ছবি</label>
+                        <div className="flex items-center gap-4">
+                          <label className="flex-grow cursor-pointer bg-emerald-950 border border-emerald-800 border-dashed rounded-xl p-4 hover:border-emerald-500 transition-all text-center">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => handleImageUpload(e, 'event')}
+                              className="hidden"
+                              disabled={uploading}
+                            />
+                            <div className="flex flex-col items-center gap-2">
+                              <Camera className={cn("text-emerald-500", uploading && "animate-pulse")} size={24} />
+                              <span className="text-sm text-emerald-400">
+                                {uploading ? "আপলোড হচ্ছে..." : "ছবি সিলেক্ট করুন"}
+                              </span>
+                            </div>
+                          </label>
+                          <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-emerald-800 bg-emerald-950">
+                            {editingItem.image ? (
+                              <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-emerald-800">
+                                <ImageIcon size={32} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : editType === 'member' ? (
                     <>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -3080,7 +4712,92 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNotification: (m: string, t: 'success' | 'error') => void }) => {
+const EventsPage = ({ onBack }: { onBack: () => void }) => {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!db) return;
+    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'events');
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-emerald-50/30 py-12 px-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-12">
+          <div>
+            <h1 className="text-3xl md:text-5xl font-bold text-emerald-950 mb-4">আমাদের ইভেন্টসমূহ</h1>
+            <p className="text-lg text-emerald-800/70">সাউদাস-এর আসন্ন এবং বিগত কার্যক্রমসমূহ।</p>
+          </div>
+          <button 
+            onClick={onBack}
+            className="p-3 bg-white text-emerald-600 rounded-2xl border border-emerald-100 hover:bg-emerald-50 transition-all shadow-sm"
+          >
+            <ArrowRight className="rotate-180" size={24} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+          </div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-emerald-100">
+            <Calendar size={48} className="mx-auto text-emerald-200 mb-4" />
+            <p className="text-emerald-900/50 italic text-lg">বর্তমানে কোনো ইভেন্ট নেই।</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {events.map((event) => (
+              <motion.div 
+                key={event.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[2.5rem] overflow-hidden border border-emerald-100 shadow-sm hover:shadow-xl transition-all group"
+              >
+                <div className="aspect-video relative overflow-hidden">
+                  <img 
+                    src={event.image || "https://images.unsplash.com/photo-1511632765486-a01980e01a18?q=80&w=2070&auto=format&fit=crop"} 
+                    alt={event.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-4 left-4 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg">
+                    {event.date}
+                  </div>
+                </div>
+                <div className="p-8">
+                  <h3 className="text-2xl font-bold text-emerald-950 mb-4 group-hover:text-emerald-600 transition-colors">{event.title}</h3>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center gap-3 text-emerald-700 text-sm">
+                      <Clock size={16} /> {event.time}
+                    </div>
+                    <div className="flex items-center gap-3 text-emerald-700 text-sm">
+                      <MapPin size={16} /> {event.location}
+                    </div>
+                  </div>
+                  <p className="text-emerald-900/60 text-sm leading-relaxed line-clamp-3">
+                    {event.description}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PaymentPage = ({ onBack, showNotification, config }: { onBack: () => void, showNotification: (m: string, t: 'success' | 'error') => void, config: SiteConfig }) => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -3139,23 +4856,30 @@ const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNot
                   <UserIcon size={32} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-emerald-950">মোঃ আবু সাইদ</h3>
-                  <p className="text-emerald-600 font-medium">কোষাধ্যক্ষ, সাউদাস</p>
+                  <h3 className="text-xl font-bold text-emerald-950">{config.payment.treasurerName}</h3>
+                  <p className="text-emerald-600 font-medium">{config.payment.treasurerRole}</p>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#e2136e] rounded-xl flex items-center justify-center text-white font-bold">ব</div>
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-sm border border-pink-100">
+                      <img 
+                        src="https://raw.githubusercontent.com/Sabbir-Hossain/BD-Payment-Gateway-Icons/master/bkash.png" 
+                        alt="Bkash" 
+                        className="w-full h-full object-contain p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                     <div>
                       <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">বিকাশ (পার্সোনাল)</p>
-                      <p className="text-lg font-bold text-emerald-950">01797315660</p>
+                      <p className="text-lg font-bold text-emerald-950">{config.payment.bkash}</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText('01797315660');
+                      navigator.clipboard.writeText(config.payment.bkash);
                       showNotification("নম্বর কপি করা হয়েছে", 'success');
                     }}
                     className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
@@ -3166,15 +4890,22 @@ const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNot
 
                 <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#f7941d] rounded-xl flex items-center justify-center text-white font-bold">ন</div>
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-sm border border-orange-100">
+                      <img 
+                        src="https://raw.githubusercontent.com/Sabbir-Hossain/BD-Payment-Gateway-Icons/master/nagad.png" 
+                        alt="Nagad" 
+                        className="w-full h-full object-contain p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                     <div>
                       <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">নগদ (পার্সোনাল)</p>
-                      <p className="text-lg font-bold text-emerald-950">01797315660</p>
+                      <p className="text-lg font-bold text-emerald-950">{config.payment.nagad}</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText('01797315660');
+                      navigator.clipboard.writeText(config.payment.nagad);
                       showNotification("নম্বর কপি করা হয়েছে", 'success');
                     }}
                     className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
@@ -3185,15 +4916,22 @@ const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNot
 
                 <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#8c3494] rounded-xl flex items-center justify-center text-white font-bold">র</div>
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-sm border border-purple-100">
+                      <img 
+                        src="https://raw.githubusercontent.com/Sabbir-Hossain/BD-Payment-Gateway-Icons/master/rocket.png" 
+                        alt="Rocket" 
+                        className="w-full h-full object-contain p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                     <div>
                       <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">রকেট</p>
-                      <p className="text-lg font-bold text-emerald-950">017973156603</p>
+                      <p className="text-lg font-bold text-emerald-950">{config.payment.rocket}</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText('017973156603');
+                      navigator.clipboard.writeText(config.payment.rocket);
                       showNotification("নম্বর কপি করা হয়েছে", 'success');
                     }}
                     className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
@@ -3281,6 +5019,58 @@ const PaymentPage = ({ onBack, showNotification }: { onBack: () => void, showNot
   );
 };
 
+const BottomNav = ({ 
+  user, 
+  onLoginClick, 
+  setView, 
+  currentView 
+}: { 
+  user: any, 
+  onLoginClick: () => void, 
+  setView: (v: any) => void,
+  currentView: string
+}) => {
+  const handleLogout = () => {
+    signOut(auth);
+  };
+
+  const navItems = [
+    { id: 'home', label: 'হোম', icon: Home, action: () => setView('home') },
+    { id: 'events', label: 'ইভেন্ট', icon: Calendar, action: () => setView('events') },
+    { id: 'blood', label: 'রক্ত', icon: Droplets, action: () => setView('blood') },
+    { id: 'chat', label: 'চ্যাট', icon: MessageCircle, action: () => setView('chat') },
+    ...(user ? [{ id: 'profile', label: 'প্রোফাইল', icon: UserIcon, action: () => setView('profile') }] : []),
+    { 
+      id: 'auth', 
+      label: user ? 'লগআউট' : 'লগইন', 
+      icon: user ? LogOut : LogIn, 
+      action: user ? handleLogout : onLoginClick 
+    },
+  ];
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-emerald-100 dark:border-slate-800 px-4 py-2 pb-safe">
+      <div className="flex items-center justify-around max-w-md mx-auto">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={item.action}
+            className={cn(
+              "flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-90",
+              currentView === item.id 
+                ? "text-emerald-600" 
+                : "text-emerald-900/40 dark:text-slate-400"
+            )}
+          >
+            <item.icon size={20} />
+            <span className="text-[10px] font-bold">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -3299,7 +5089,47 @@ export default function App() {
     type: 'danger'
   });
 
-  const [view, setView] = useState<'home' | 'admin' | 'payment'>('home');
+  const [view, setView] = useState<'home' | 'admin' | 'payment' | 'blood' | 'chat' | 'notice' | 'directory' | 'events' | 'profile'>('home');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'site_config', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        setSiteConfig(snapshot.data() as SiteConfig);
+      } else {
+        // Seed initial config if it doesn't exist
+        const isAdmin = user?.email === "md.munnahossain885@gmail.com" || user?.email === "admin@saudas.org";
+        if (isAdmin) {
+          setDoc(doc(db, 'site_config', 'main'), DEFAULT_CONFIG);
+        }
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        setIsOffline(false);
+      } catch (error: any) {
+        if (error.message?.includes('offline')) {
+          setIsOffline(true);
+        }
+      }
+    };
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    document.documentElement.classList.toggle('dark');
+  };
 
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
@@ -3319,28 +5149,123 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      showNotification("সফলভাবে লগআউট হয়েছে।", 'success');
+      setView('home');
+    } catch (error) {
+      showNotification("লগআউট ব্যর্থ হয়েছে।", 'error');
+    }
+  };
+
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-white font-sans selection:bg-emerald-100 selection:text-emerald-900">
-        {view === 'home' ? (
-          <>
-            <Navbar onLoginClick={() => setIsLoginModalOpen(true)} user={user} setView={setView} />
-            <main>
-              <Hero setView={setView} />
-              <About />
+      <div className="min-h-screen bg-white dark:bg-slate-950 font-sans selection:bg-emerald-100 selection:text-emerald-900 pb-20 md:pb-0 transition-colors duration-300">
+        {isOffline && (
+          <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white text-center py-2 text-xs font-bold animate-pulse">
+            সার্ভারের সাথে সংযোগ বিচ্ছিন্ন। অনুগ্রহ করে আপনার ইন্টারনেট কানেকশন চেক করুন।
+          </div>
+        )}
+        <Navbar 
+          onLoginClick={() => setIsLoginModalOpen(true)} 
+          onLogoutClick={handleLogout}
+          user={user} 
+          setView={setView} 
+          toggleTheme={toggleTheme}
+          theme={theme}
+        />
+        
+        <main>
+          {view === 'home' ? (
+            <>
+              <Hero setView={setView} config={siteConfig} />
               <Services />
               <ActiveMembers />
-              <MemberDirectory />
+              
+              {/* Community Features Section */}
+              <section id="community" className="py-24 bg-emerald-50/50">
+                <div className="max-w-7xl mx-auto px-6">
+                  <div className="text-center mb-16">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 text-emerald-600 text-sm font-bold mb-6 border border-emerald-200"
+                    >
+                      <LayoutDashboard size={16} />
+                      <span>কমিউনিটি হাব</span>
+                    </motion.div>
+                    <motion.h2 
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.1 }}
+                      className="text-4xl md:text-5xl font-black text-emerald-950 mb-6"
+                    >
+                      আমাদের <span className="text-emerald-600">কার্যক্রম</span>
+                    </motion.h2>
+                    <motion.p
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.2 }}
+                      className="text-emerald-900/60 text-lg max-w-2xl mx-auto"
+                    >
+                      নোটিশ বোর্ড, সদস্য তালিকা, রক্তদান এবং চ্যাট - সবকিছুই এখন আপনার হাতের নাগালে।
+                    </motion.p>
+                  </div>
+                  <QuickLinks setView={setView} />
+                </div>
+              </section>
+
+              <section id="members" className="py-24 bg-white">
+                <div className="max-w-7xl mx-auto px-6 text-center">
+                  <h2 className="text-emerald-600 font-bold text-sm uppercase tracking-widest mb-4">সদস্য তালিকা</h2>
+                  <h3 className="text-4xl font-bold text-emerald-950 mb-6">আমাদের গর্বিত সদস্যবৃন্দ</h3>
+                  <p className="text-emerald-900/60 mb-10 max-w-2xl mx-auto">
+                    সাউদাস-এর সাথে যুক্ত সকল নিবেদিতপ্রাণ সদস্যদের তালিকা এবং তাদের কার্যক্রম সম্পর্কে জানতে নিচের বাটনে ক্লিক করুন।
+                  </p>
+                  <button 
+                    onClick={() => setView('directory')}
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 group"
+                  >
+                    পূর্ণাঙ্গ সদস্য তালিকা দেখুন
+                    <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+                  </button>
+                </div>
+              </section>
+
+              <About config={siteConfig} />
               <RegistrationForm showNotification={showNotification} />
-              <Contact />
-            </main>
-            <Footer setView={setView} />
-          </>
-        ) : view === 'payment' ? (
-          <PaymentPage onBack={() => setView('home')} showNotification={showNotification} />
-        ) : (
-          user && <AdminPanel user={user} showNotification={showNotification} setConfirmConfig={setConfirmConfig} setView={setView} />
-        )}
+              <Contact config={siteConfig} />
+              <Footer setView={setView} />
+            </>
+          ) : view === 'notice' ? (
+            <NoticeSection isAdmin={user?.email === "md.munnahossain885@gmail.com" || user?.email === "admin@saudas.org"} />
+          ) : view === 'directory' ? (
+            <MemberDirectory onBack={() => setView('home')} />
+          ) : view === 'events' ? (
+            <EventsPage onBack={() => setView('home')} />
+          ) : view === 'blood' ? (
+            <BloodSection user={user} isAdmin={user?.email === "md.munnahossain885@gmail.com" || user?.email === "admin@saudas.org"} />
+          ) : view === 'chat' ? (
+            <ChatSection user={user} />
+          ) : view === 'profile' ? (
+            <ProfileSection user={user} showNotification={showNotification} />
+          ) : view === 'payment' ? (
+            <PaymentPage onBack={() => setView('home')} showNotification={showNotification} config={siteConfig} />
+          ) : (
+            user && <AdminPanel user={user} showNotification={showNotification} setConfirmConfig={setConfirmConfig} setView={setView} siteConfig={siteConfig} />
+          )}
+        </main>
+
+        <BottomNav 
+          user={user} 
+          onLoginClick={() => setIsLoginModalOpen(true)} 
+          setView={setView} 
+          currentView={view} 
+        />
         
         <AnimatePresence>
           {isLoginModalOpen && !user && (

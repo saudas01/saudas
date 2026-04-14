@@ -57,18 +57,13 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create: if isAuthenticated() && (request.auth.uid == userId) && 
-                    (request.resource.data.role == 'user' || 
-                    (request.auth.token.email == "md.munnahossain885@gmail.com" && request.resource.data.role == 'admin') ||
-                    (request.auth.token.email == "admin@saudas.org" && request.resource.data.role == 'admin'));
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     match /members/{memberId} {
       // Public can only see approved members. Admins can see all.
-      allow read: if (resource.data.status == 'approved') || isAdmin();
+      allow read: if true; // Allow public read for directory
       
       // Anyone can submit a registration, but it must be 'pending' unless they are an admin.
       allow create: if isValidMember(request.resource.data) && 
@@ -104,6 +99,42 @@ service cloud.firestore {
                     request.resource.data.status == 'pending';
       // Only admins can read/update/delete
       allow read, update, delete: if isAdmin();
+    }
+
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /blood_posts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /blood_comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    match /chat_messages/{messageId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    match /site_config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     function isAdmin() {

@@ -898,7 +898,31 @@ const BloodSection = ({ user, isAdmin }: { user: any, isAdmin: boolean }) => {
 const ChatSection = ({ user }: { user: any }) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [userData, setUserData] = useState<any>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'users', user.uid), (doc) => {
+      if (doc.exists()) {
+        setUserData(doc.data());
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  const getUserColor = (uid: string) => {
+    const colors = [
+      'text-blue-600', 'text-purple-600', 'text-orange-600', 
+      'text-pink-600', 'text-indigo-600', 'text-cyan-600',
+      'text-teal-600', 'text-rose-600'
+    ];
+    let hash = 0;
+    for (let i = 0; i < uid.length; i++) {
+      hash = uid.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'chat_messages'), orderBy('createdAt', 'asc'), limit(100));
@@ -919,7 +943,7 @@ const ChatSection = ({ user }: { user: any }) => {
     try {
       await addDoc(collection(db, 'chat_messages'), {
         text: newMessage,
-        authorName: user.displayName || 'Anonymous',
+        authorName: userData?.name || user.displayName || 'Anonymous',
         authorId: user.uid,
         authorPhoto: user.photoURL || '',
         createdAt: Date.now()
@@ -963,20 +987,22 @@ const ChatSection = ({ user }: { user: any }) => {
 
           return (
             <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
-              {showName && !isMe && (
-                <span className="text-[10px] font-bold text-emerald-900/40 ml-10 mb-1">{msg.authorName}</span>
-              )}
-              <div className={cn("flex items-end gap-2 max-w-[80%]", isMe && "flex-row-reverse")}>
+              <div className={cn("flex items-end gap-2 max-w-[85%]", isMe && "flex-row-reverse")}>
                 {!isMe && (
-                  <div className="w-8 h-8 rounded-full bg-emerald-200 flex-shrink-0 overflow-hidden border border-white shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-emerald-200 flex-shrink-0 overflow-hidden border border-white shadow-sm mb-1">
                     {msg.authorPhoto ? <img src={msg.authorPhoto} alt="" className="w-full h-full object-cover" /> : <UserIcon size={16} className="m-2 text-emerald-600" />}
                   </div>
                 )}
                 <div className={cn(
-                  "p-3 rounded-2xl text-sm shadow-sm",
+                  "p-3 rounded-2xl text-sm shadow-sm relative",
                   isMe ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white text-emerald-950 rounded-tl-none border border-emerald-50"
                 )}>
-                  {msg.text}
+                  {!isMe && showName && (
+                    <div className={cn("text-[10px] font-black mb-1", getUserColor(msg.authorId))}>
+                      {msg.authorName}
+                    </div>
+                  )}
+                  <div className="leading-relaxed">{msg.text}</div>
                   <div className={cn("text-[8px] mt-1 opacity-50 text-right", isMe ? "text-white" : "text-emerald-900/40")}>
                     {new Date(msg.createdAt).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
                   </div>
@@ -2478,7 +2504,7 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
       }
 
       // Special case for initial admin setup
-      if (emailToSignIn === 'admin@saudas.org' && password === 'admin123456') {
+      if (emailToSignIn === 'admin@saudas.org' && password === 'saudas@2026') {
         try {
           await signInWithEmailAndPassword(auth, emailToSignIn, password);
         } catch (error: any) {
@@ -2512,7 +2538,7 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
       
       // Handle Firebase Auth errors specifically
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড। আপনি নিবন্ধিত কিনা নিশ্চিত হয়ে নিন।";
+        errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড। আপনি যদি নতুন হয়ে থাকেন তবে 'রেজিস্ট্রেশন' করুন অথবা গুগল দিয়ে লগইন করার চেষ্টা করুন।";
       } else if (error.code === 'auth/wrong-password') {
         errorMessage = "ভুল পাসওয়ার্ড। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন অথবা 'পাসওয়ার্ড ভুলে গেছেন?' লিঙ্কটি ব্যবহার করুন।";
       } else if (error.code === 'auth/invalid-email') {
@@ -5718,7 +5744,7 @@ export default function App() {
       setUser(u);
       if (u) {
         setIsLoginModalOpen(false);
-        setView('admin');
+        setView('profile');
       } else {
         setView('home');
       }

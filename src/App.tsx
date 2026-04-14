@@ -1764,7 +1764,7 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
 
 
   const fetchMembers = async (isNext = false) => {
-    if (!db) return;
+    if (!db || (isNext && !hasMore)) return;
     setLoading(true);
     try {
       let q = query(
@@ -1788,7 +1788,12 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
       const newMembers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       if (isNext) {
-        setDbMembers(prev => [...prev, ...newMembers]);
+        setDbMembers(prev => {
+          // Prevent duplicates
+          const existingIds = new Set(prev.map(m => m.id));
+          const uniqueNewMembers = newMembers.filter(m => !existingIds.has(m.id));
+          return [...prev, ...uniqueNewMembers];
+        });
       } else {
         setDbMembers(newMembers);
       }
@@ -1805,6 +1810,19 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
   useEffect(() => {
     fetchMembers();
   }, []);
+
+  // Infinite Scroll Observer
+  const observer = React.useRef<IntersectionObserver | null>(null);
+  const lastMemberRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (loading) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchMembers(true);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, hasMore]);
 
   // Combine hardcoded members with database members
   const allMembers = [
@@ -1908,6 +1926,7 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
                 ) : filteredMembers.map((member, idx) => (
                   <motion.tr
                     key={member.id || idx}
+                    ref={idx === filteredMembers.length - 1 ? lastMemberRef : null}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.01 }}
@@ -1978,6 +1997,7 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
             ) : filteredMembers.map((member, idx) => (
               <motion.div
                 key={member.id || idx}
+                ref={idx === filteredMembers.length - 1 ? lastMemberRef : null}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.01 }}
@@ -2026,9 +2046,14 @@ const MemberDirectory = ({ onBack }: { onBack?: () => void }) => {
                 </div>
               </motion.div>
             ))}
-            {filteredMembers.length === 0 && (
+            {filteredMembers.length === 0 && !loading && (
               <div className="py-12 text-center text-emerald-900/40 italic">
                 আপনার অনুসন্ধানের সাথে মেলে এমন কোনো সদস্য পাওয়া যায়নি।
+              </div>
+            )}
+            {loading && dbMembers.length > 0 && (
+              <div className="py-8 flex justify-center">
+                <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
               </div>
             )}
           </div>
@@ -2538,7 +2563,7 @@ const LoginModal = ({ onClose, showNotification }: { onClose: () => void, showNo
       
       // Handle Firebase Auth errors specifically
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড। আপনি যদি নতুন হয়ে থাকেন তবে 'রেজিস্ট্রেশন' করুন অথবা গুগল দিয়ে লগইন করার চেষ্টা করুন।";
+        errorMessage = "ভুল ইমেইল/ফোন নম্বর অথবা পাসওয়ার্ড। আপনি যদি নতুন হয়ে থাকেন তবে 'রেজিস্ট্রেশন' করুন অথবা পাসওয়ার্ড রিসেট করার চেষ্টা করুন।";
       } else if (error.code === 'auth/wrong-password') {
         errorMessage = "ভুল পাসওয়ার্ড। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন অথবা 'পাসওয়ার্ড ভুলে গেছেন?' লিঙ্কটি ব্যবহার করুন।";
       } else if (error.code === 'auth/invalid-email') {
